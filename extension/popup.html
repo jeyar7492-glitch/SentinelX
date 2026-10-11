@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SentinelX - Local URL Security</title>
+  <title>SentinelX — Real-Time Cyber Shield</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -11,122 +11,168 @@
     <!-- Header -->
     <header class="app-header">
       <div class="brand">
-        <img src="icons/icon-48.png" alt="SentinelX" class="brand-logo" width="28" height="28">
-        <div>
-          <h1 class="brand-title">SentinelX</h1>
-          <span class="brand-subtitle">Local Security & Threat Blocker</span>
+        <div class="brand-shield-wrapper">
+          <img src="icons/icon-48.png" alt="SentinelX Shield" class="brand-logo" width="28" height="28">
+        </div>
+        <div class="brand-titles">
+          <div class="brand-name-row">
+            <h1 class="brand-title">SentinelX</h1>
+            <span class="version-tag">v2.0</span>
+          </div>
+          <span class="brand-subtitle">Real-Time Browser Protection</span>
         </div>
       </div>
-      <div class="backend-status-badge">
-        <span id="backend-status" class="status-indicator"></span>
-        <span id="backend-status-text">Checking...</span>
+      <div class="header-status-box">
+        <div class="backend-status-badge" id="backend-status-pill" title="Local FastAPI Core Status">
+          <span id="backend-status" class="status-indicator checking"></span>
+          <span id="backend-status-text">Checking Core...</span>
+        </div>
       </div>
     </header>
+
+    <!-- Global Protection Status Banner -->
+    <div id="global-protection-banner" class="protection-banner active">
+      <div class="banner-left">
+        <span class="pulse-dot"></span>
+        <span id="protection-status-label" class="banner-text">Real-Time Protection Active</span>
+      </div>
+      <span id="mode-badge-pill" class="mode-pill">STANDARD DNR</span>
+    </div>
 
     <!-- Navigation Tabs -->
     <nav class="popup-nav">
       <button id="nav-scan" class="nav-tab active">
-        🔍 URL Scanner
+        <span class="tab-icon">🔍</span> Scanner
+      </button>
+      <button id="nav-history" class="nav-tab">
+        <span class="tab-icon">🕒</span> History
       </button>
       <button id="nav-settings" class="nav-tab">
-        🛡️ Protection Rules
+        <span class="tab-icon">🛡️</span> Settings
       </button>
     </nav>
 
     <!-- VIEW 1: URL SCANNER -->
     <div id="view-scanner" class="view-panel active">
-      <!-- Scan Input Form -->
+      <!-- Active Tab Domain Bar -->
+      <section class="active-tab-bar">
+        <div class="tab-host-info">
+          <span class="tab-host-label">ACTIVE WEBSITE:</span>
+          <span id="active-tab-domain" class="tab-host-value">Detecting...</span>
+        </div>
+        <button id="scan-current-btn" class="btn-icon-rescan" title="Rescan active tab">
+          ↻ Rescan Tab
+        </button>
+      </section>
+
+      <!-- URL Input & Manual Scan -->
       <section class="scan-bar">
         <div class="input-wrapper">
           <input
             type="text"
             id="url-input"
-            placeholder="Enter or paste URL (http:// or https://)..."
+            placeholder="Enter URL to analyze (http:// or https://)..."
             autocomplete="off"
             spellcheck="false"
           >
           <button id="scan-btn" class="btn-primary" title="Analyze entered URL">Analyze</button>
-        </div>
-        <div class="quick-actions">
-          <button id="scan-current-btn" class="btn-secondary">
-            <span class="btn-icon">↻</span> Rescan Active Tab
-          </button>
         </div>
       </section>
 
       <!-- Loading State -->
       <div id="loading-state" class="loading-state" style="display: none;">
         <div class="spinner"></div>
-        <p>Running local heuristic security checks...</p>
+        <p class="loading-text">Analyzing URL structure & local indicators...</p>
       </div>
 
-      <!-- Error Banner -->
+      <!-- Offline / Error Notice -->
       <div id="error-card" class="error-card" style="display: none;">
         <div class="error-header">
           <span class="error-icon">⚠️</span>
-          <strong class="error-title">Notice</strong>
+          <strong id="error-title" class="error-title">Backend Offline</strong>
         </div>
         <p id="error-message" class="error-body"></p>
+        <div id="offline-recovery-box" class="offline-recovery-box" style="display: none;">
+          <span class="recovery-hint">Local DNR pre-navigation rules remain active. To start backend:</span>
+          <code class="code-snippet">systemctl --user start sentinelx</code>
+        </div>
       </div>
 
       <!-- Results Container -->
       <main id="results-container" class="results-container" style="display: none;">
-
-        <!-- Target URL Header -->
+        <!-- Scanned Target & Last Scan Time -->
         <div class="target-url-box">
-          <span class="target-label">Scanned Target:</span>
-          <div id="current-url-text" class="target-url"></div>
+          <div class="target-url-row">
+            <span class="target-label">Target:</span>
+            <div id="current-url-text" class="target-url"></div>
+          </div>
+          <span id="scan-time-text" class="scan-timestamp">Just now</span>
         </div>
 
-        <!-- Quick Block Action (For High Risk Findings) -->
+        <!-- Quick Block Bar (For High-Risk or Suspicious findings) -->
         <div id="quick-block-bar" class="quick-block-bar" style="display: none;">
-          <span class="quick-block-text">High-confidence threat identified:</span>
+          <div class="quick-block-info">
+            <span class="quick-block-icon">⛔</span>
+            <span class="quick-block-text">Identified as high-risk threat indicator:</span>
+          </div>
           <button id="btn-quick-block" class="btn-action-block">
-            ⛔ Add to Pre-Navigation Blocklist
+            + Add to Pre-Navigation DNR Blocklist
           </button>
         </div>
 
-        <!-- Risk Score Card -->
-        <div class="score-card">
+        <!-- Master Risk Score Card -->
+        <div id="score-card" class="score-card">
           <div class="score-card-top">
-            <div class="score-display">
+            <div class="score-info">
               <span class="score-label">Risk Assessment</span>
-              <span id="risk-score-value" class="score-value">0/100</span>
+              <div class="score-value-row">
+                <span id="risk-score-value" class="score-value">0</span>
+                <span class="score-max">/100</span>
+              </div>
             </div>
-            <div id="status-badge" class="classification-badge safe">SAFE</div>
+            <div class="verdict-wrapper">
+              <span id="status-badge" class="classification-badge safe">SAFE</span>
+              <span id="action-pill" class="action-pill allow">ALLOW</span>
+            </div>
           </div>
 
+          <!-- Animated Progress Bar -->
           <div class="score-bar-track">
             <div id="risk-score-bar" class="score-bar-fill safe" style="width: 5%;"></div>
           </div>
 
           <p id="result-summary" class="result-summary-text"></p>
+          <div id="confidence-box" class="confidence-box">
+            <span class="confidence-label">Evidence Confidence:</span>
+            <span id="confidence-text" class="confidence-value">HIGH</span>
+          </div>
         </div>
 
-        <!-- HTTP vs HTTPS Explainer Card (Critical Security Nuance) -->
-        <section class="card protocol-card">
-          <div class="card-header">
-            <span class="card-title">Transport Security (HTTP vs HTTPS)</span>
-            <span id="http-badge" class="protocol-badge encrypted">HTTPS</span>
-          </div>
-          <p id="http-summary" class="protocol-summary"></p>
-          <div class="nuance-alert">
-            <strong class="alert-heading">⚠️ Security Fact:</strong>
-            <p id="http-explanation" class="alert-content"></p>
-          </div>
-        </section>
-
-        <!-- Heuristic Detection Rules Breakdown -->
+        <!-- Transparent Detection Reasons -->
         <section class="card rules-card">
           <div class="card-header">
-            <span class="card-title">Transparent Heuristic Detections</span>
+            <span class="card-title">Detection Reasons & Flags</span>
+            <span id="flag-count-pill" class="badge-count">0 Flags</span>
           </div>
           <div id="rules-container" class="rules-list">
             <!-- Populated dynamically -->
           </div>
         </section>
 
-        <!-- Safe Indicators -->
+        <!-- Transport Security (HTTP vs HTTPS Deep Dive) -->
+        <section class="card protocol-card">
+          <div class="card-header">
+            <span class="card-title">Transport Encryption</span>
+            <span id="http-badge" class="protocol-badge encrypted">HTTPS (TLS)</span>
+          </div>
+          <p id="http-summary" class="protocol-summary"></p>
+          <div class="nuance-alert">
+            <strong class="alert-heading">⚠️ Security Reality:</strong>
+            <p id="http-explanation" class="alert-content"></p>
+          </div>
+        </section>
+
+        <!-- Verified Positive Indicators -->
         <section class="card safe-indicators-card">
           <div class="card-header">
             <span class="card-title">Verified Positive Indicators</span>
@@ -135,25 +181,39 @@
             <!-- Populated dynamically -->
           </div>
         </section>
-
       </main>
     </div>
 
-    <!-- VIEW 2: PROTECTION RULES & SETTINGS -->
+    <!-- VIEW 2: RECENT SCAN HISTORY -->
+    <div id="view-history" class="view-panel" style="display: none;">
+      <section class="card history-card">
+        <div class="card-header">
+          <span class="card-title">Recent Local Scans</span>
+          <button id="btn-clear-history" class="btn-text-danger">Clear History</button>
+        </div>
+        <p class="section-desc">Stored locally in Chrome memory. Never sent to any external server.</p>
+
+        <div id="history-items-container" class="history-list">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+    </div>
+
+    <!-- VIEW 3: PROTECTION SETTINGS -->
     <div id="view-settings" class="view-panel" style="display: none;">
-      <!-- Mode Selection Card -->
+      <!-- Main Toggle & Mode Selector -->
       <section class="card settings-card">
         <div class="card-header">
-          <span class="card-title">Protection Mode</span>
-          <span id="dnr-status-pill" class="pill-active">Enforcing Rules</span>
+          <span class="card-title">Protection Modes</span>
+          <span id="dnr-status-pill" class="pill-active">Enforcing DNR</span>
         </div>
 
         <div class="mode-options">
           <label class="mode-option">
             <input type="radio" name="protection-mode" value="STANDARD" checked id="mode-standard">
             <div class="mode-desc">
-              <strong>Standard Protection (Default)</strong>
-              <span>Block confirmed high-confidence threats via DNR before navigation. Warn on suspicious URLs.</span>
+              <strong>Standard Protection (Recommended)</strong>
+              <span>Pre-navigation blocking for confirmed threats. Warnings for suspicious URLs. Default mode.</span>
             </div>
           </label>
 
@@ -161,24 +221,53 @@
             <input type="radio" name="protection-mode" value="STRICT_ALLOWLIST" id="mode-strict">
             <div class="mode-desc">
               <strong class="strict-highlight">Strict Allowlist Mode</strong>
-              <span>Block all websites except your explicitly approved allowlist. (Warning: Disables general browsing).</span>
+              <span>Blocks ALL websites except your explicitly approved domains. (Disrupts general browsing).</span>
             </div>
           </label>
 
           <label class="mode-option">
             <input type="radio" name="protection-mode" value="DISABLED" id="mode-disabled">
             <div class="mode-desc">
-              <strong>Protection Disabled</strong>
-              <span>No pre-navigation blocking. On-demand scanning remains available.</span>
+              <strong class="disabled-highlight">Protection Disabled</strong>
+              <span>No pre-navigation blocking. On-demand scanning remains available. Browser is unprotected.</span>
             </div>
           </label>
         </div>
       </section>
 
-      <!-- Manage Domains Section -->
+      <!-- Configurable Risk Thresholds -->
       <section class="card settings-card">
         <div class="card-header">
-          <span class="card-title">Domain Policy Manager</span>
+          <span class="card-title">Central Risk Policy Thresholds</span>
+        </div>
+        <p class="section-desc">Adjust thresholds for automated enforcement actions:</p>
+
+        <div class="threshold-row">
+          <div class="threshold-label-box">
+            <strong>Block Threshold (90–100)</strong>
+            <span>Automatic pre-navigation block</span>
+          </div>
+          <div class="threshold-input-wrapper">
+            <input type="number" id="input-block-threshold" min="85" max="100" value="90">
+          </div>
+        </div>
+
+        <div class="threshold-row">
+          <div class="threshold-label-box">
+            <strong>Warning Interstitial (80–89)</strong>
+            <span>Displays full warning before opening</span>
+          </div>
+          <div class="threshold-input-wrapper">
+            <input type="number" id="input-warn-threshold" min="60" max="89" value="80">
+          </div>
+        </div>
+        <button id="btn-save-thresholds" class="btn-sm btn-primary">Save Thresholds</button>
+      </section>
+
+      <!-- Domain Policy Manager -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <span class="card-title">Domain Lists Manager</span>
         </div>
 
         <div class="domain-input-box">
@@ -214,20 +303,46 @@
           </div>
         </div>
 
-        <!-- Built-in Signatures Notice -->
+        <!-- Built-in Signatures -->
         <div class="system-rules-footer">
-          <span>🛡️ <strong id="system-rules-count">4</strong> Built-In High-Confidence Test Signatures Active</span>
+          <span>🛡️ <strong id="system-rules-count">4</strong> Built-In High-Confidence Signatures Active</span>
+        </div>
+      </section>
+
+      <!-- Troubleshooting & Backend Status -->
+      <section class="card settings-card troubleshooting-card">
+        <div class="card-header">
+          <span class="card-title">System & Backend Health</span>
+          <button id="btn-ping-backend" class="btn-sm btn-outline">Test Ping</button>
+        </div>
+        <div class="system-health-grid">
+          <div class="health-item">
+            <span class="health-k">Local Backend:</span>
+            <span id="health-backend-val" class="health-v">127.0.0.1:8000</span>
+          </div>
+          <div class="health-item">
+            <span class="health-k">Startup Mode:</span>
+            <span class="health-v">Ubuntu Systemd User Service</span>
+          </div>
+          <div class="health-item">
+            <span class="health-k">Permissions:</span>
+            <span class="health-v">declarativeNetRequest, webNavigation</span>
+          </div>
+          <div class="health-item">
+            <span class="health-k">Telemetry:</span>
+            <span class="health-v highlight-green">Zero Cloud Calls (100% Local)</span>
+          </div>
         </div>
       </section>
     </div>
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Local-Only MVP</span>
+      <span>Local-First</span>
       <span>•</span>
-      <span>Pre-Navigation DNR Blocking</span>
+      <span>Pre-Navigation DNR</span>
       <span>•</span>
-      <span>Strict 127.0.0.1</span>
+      <span>127.0.0.1 Loopback</span>
     </footer>
   </div>
 

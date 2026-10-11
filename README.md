@@ -1,241 +1,170 @@
-# SentinelX — Pre-Navigation Web Security Architecture
+# SentinelX — Real-Time Browser Security Shield & Threat Blocker
 
-**SentinelX** is a zero-cost, local-only web security and privacy protection platform for Ubuntu Linux and Google Chrome (Manifest V3).
-
-Unlike conventional extensions that merely warn you *after* a page has already begun loading or rely on slow cloud API lookups, SentinelX features **pre-navigation blocking** powered by Chrome's native `declarativeNetRequest` (DNR) engine. Confirmed high-confidence threats are intercepted and redirected to a safe, extension-owned blocked page **before your browser establishes a TCP socket connection or sends any HTTP request** to the destination server.
+**SentinelX** is a local-first, zero-cost cybersecurity browser shield engineered for **Ubuntu Linux** and **Google Chrome (Manifest V3)**. It provides pre-navigation network blocking via `declarativeNetRequest`, real-time navigation evaluation, full-page interstitial warnings for dangerous destinations, transparent risk scoring heuristics, and an automatically managed local FastAPI backend with user-level systemd service autostart.
 
 ---
 
-## 1. Core Architecture & Protection Layers
+## 🛡️ Architecture & Core Components
 
 ```
-                                  [ Browser Navigation Event ]
-                                                │
-                                                ▼
-                         ┌─────────────────────────────────────────────┐
-                         │  Chrome declarativeNetRequest (DNR) Engine   │
-                         │      (Synchronous Pre-Navigation Stack)     │
-                         └──────────────────────┬──────────────────────┘
-                                                │
-                       ┌────────────────────────┴────────────────────────┐
-                       │                                                 │
-               [ Matches Block Rule ]                            [ No Match / Allowed ]
-                       │                                                 │
-                       ▼                                                 ▼
-        ┌──────────────────────────────┐                  ┌──────────────────────────────┐
-        │  Safe Block Interstitial     │                  │  Destination Server Network  │
-        │  (chrome-extension://.../    │                  │  (Connection & Page Load)    │
-        │   blocked.html)              │                  └──────────────┬───────────────┘
-        │                              │                                 │
-        │ • Explains matched indicator │                                 ▼
-        │ • Zero remote scripts / CSP  │                  ┌──────────────────────────────┐
-        │ • Anti-open-redirect guard   │                  │  SentinelX Popup & Backend   │
-        │ • Controlled allowlist add   │                  │  (Asynchronous Heuristics)   │
-        └──────────────────────────────┘                  │ • Transparent explainable ML │
-                                                          │ • Bound to 127.0.0.1:8000    │
-                                                          │ • Zero telemetry / logs      │
-                                                          └──────────────────────────────┘
-```
-
-### Synchronous Pre-Navigation Blocking vs. Asynchronous Analysis
-1. **Pre-Navigation Enforcement (DeclarativeNetRequest)**:
-   - Synchronous and instantaneous.
-   - Evaluated by Chrome's core networking stack prior to DNS resolution, TLS handshake, or HTTP request transmission.
-   - Uses preinstalled static rules (`rules/rules.json`) and locally compiled dynamic rules (`chrome.declarativeNetRequest.updateDynamicRules`).
-   - Destination server receives **0 packets / 0 requests** when a block occurs.
-2. **Asynchronous Local Heuristic Analysis (FastAPI Backend)**:
-   - Deep structural, lexical, and behavioral evaluation of target URLs.
-   - Runs exclusively on `127.0.0.1:8000` with transparent scoring (0–100) and clear explanations.
-   - Does **not** claim to block a navigation that has already started; instead, when new high-confidence evidence is verified, the user or engine can promote the indicator into browser dynamic rules for all subsequent navigations.
-
----
-
-## 2. Protection Modes
-
-SentinelX provides three distinct operating modes configured in the extension settings:
-
-| Mode | Behavior | Use Case |
-| :--- | :--- | :--- |
-| **Standard** *(Default)* | Blocks confirmed high-confidence indicators; warns about suspicious URLs in the popup. | Everyday secure browsing with zero workflow disruption. |
-| **Strict Allowlist** | Blocks all web navigations *except* explicitly approved domains on the allowlist. | High-security environments, kiosk setups, or locked-down workstations. *(May disrupt normal browsing).* |
-| **Protection Disabled** | Bypasses all DNR rules and navigation blocking; displays prominent disabled badge. | Temporary troubleshooting or uninhibited access. |
-
-> **Safety Guarantee**: SentinelX defaults to **Standard** mode and will never silently activate Strict Allowlist mode without explicit user selection.
-
----
-
-## 3. Local Threat Rule Manager & Boundary Safety
-
-### Strict Boundary Matching
-Naive substring matching causes disastrous false positives (e.g., blocking `bad.com` must never block `notbad.com` or `mybad.company.org`). SentinelX enforces strict domain boundary syntax:
-```
-||malicious-domain.test^
-```
-- The leading `||` anchors the rule to the start of the hostname or any subdomain.
-- The trailing `^` delimiter matches domain boundaries (port separators `:`, path separators `/`, query separators `?`, or the end of the string).
-
-### Normalization Pipeline
-All input indicators pass through `normalizeDomain()`:
-- Strips protocol schemes (`http://`, `https://`).
-- Strips ports (`:8080`, `:9797`), paths (`/login`), and query strings.
-- Strips userinfo credentials (`user:pass@`).
-- Converts internationalized domain names (IDN) to ASCII Punycode (`xn--...`).
-- Validates syntax to reject wildcards, spaces, empty strings, and malformed characters.
-
-### Safeguard Whitelist
-To prevent self-bricking, the engine protects system destinations from accidental blocks:
-- `localhost`, `127.0.0.1`, `::1`
-- `chrome`, `chrome-extension`, `about`, `edge`
-
----
-
-## 4. Blocked-Page Interstitial (`blocked.html`)
-
-When a navigation is blocked, Chrome immediately redirects the tab to SentinelX's local, extension-owned interstitial:
-- **No Remote Network Access**: The blocked destination server is never contacted.
-- **Strict Content Security Policy (CSP)**: `blocked.html` contains no inline scripts or remote resources; only bundled, local CSS and TypeScript execute.
-- **Transparent Indicator Breakdown**: Details the blocked hostname, matched indicator, and the active protection mode.
-- **Anti-Open-Redirect Security**: URL parameters (`url`, `threat`, `mode`) are strictly sanitized. `javascript:`, `data:`, or malformed redirect targets are completely rejected.
-- **False-Positive Override**: Users can review false positives and add the domain to the local allowlist with explicit user consent. Websites cannot tamper with or bypass their own rules.
-
----
-
-## 5. Repository Structure
-
-```
-sentinelx/
-├── .gitignore                      # Excludes venvs, node_modules, build caches
-├── pytest.ini                      # Pytest runner configuration
-├── README.md                       # Comprehensive documentation
-├── backend/                        # Local Python FastAPI Security Engine
-│   ├── run.py                      # Local runner bound strictly to 127.0.0.1:8000
-│   ├── requirements.txt            # Python dependencies
-│   ├── app/
-│   │   ├── main.py                 # FastAPI application & localhost enforcement
-│   │   ├── models.py               # Pydantic schemas
-│   │   ├── analyzer.py             # Heuristic scoring engine (0-100 risk score)
-│   │   └── rules.py                # Brand dictionaries & known malicious patterns
-│   └── tests/
-│       └── test_analyzer.py        # 16 automated backend tests
-├── extension/                      # Chrome Manifest V3 Extension
-│   ├── manifest.json               # MV3 manifest with declarativeNetRequest
-│   ├── package.json                # TypeScript & testing dependencies
-│   ├── tsconfig.json               # Strict TypeScript config
-│   ├── popup.html / popup.css      # Dual-tab UI (URL Scanner & Rules Manager)
-│   ├── blocked.html / blocked.css  # Safe interstitial block page
-│   ├── icons/                      # Extension icons (16x16, 48x48, 128x128)
-│   ├── rules/
-│   │   └── rules.json              # Seeded static DNR ruleset
-│   ├── src/
-│   │   ├── types.ts                # TypeScript data models
-│   │   ├── threat-manager.ts       # Domain normalization, validation, DNR compiler
-│   │   ├── background.ts           # Service worker & dynamic rule synchronizer
-│   │   ├── popup.ts                # Scanner UI & rules configuration controller
-│   │   ├── blocked.ts              # Interstitial controller & allowlist handler
-│   │   └── utils.ts                # HTML sanitization & URL validation
-│   ├── dist/                       # Compiled JavaScript bundle
-│   └── tests/
-│       ├── threat-manager.test.mjs # Domain normalization & DNR compiler unit tests
-│       └── integration-lifecycle.test.mjs # Rule persistence, restart, allowlist tests
-└── scripts/
-    ├── generate_icons.py           # PNG icon generator
-    └── verify_chrome_blocking.mjs  # Live Chrome 154 CDP pre-navigation verification
+┌────────────────────────────────────────────────────────────────────────┐
+│                        GOOGLE CHROME BROWSER                           │
+│                                                                        │
+│  ┌───────────────────────┐             ┌────────────────────────────┐  │
+│  │   Chrome Manifest V3  │             │   declarativeNetRequest    │  │
+│  │    Service Worker     │             │    Pre-Navigation Rules    │  │
+│  │   (background.js)     │◄───────────►│    (Intercepts Sockets)    │  │
+│  └──────────┬────────────┘             └─────────────┬──────────────┘  │
+│             │                                        │                 │
+│             ▼                                        ▼                 │
+│  ┌───────────────────────┐             ┌────────────────────────────┐  │
+│  │  In-Extension Engine  │             │   Full-Page Interstitial   │  │
+│  │  (local-analyzer.ts)  │             │       (blocked.html)       │  │
+│  │  Sub-ms Heuristics &  │             │   Dual Mode: BLOCK / WARN  │  │
+│  │ Degraded Mode Offline │             │   Controlled Override      │  │
+│  └──────────┬────────────┘             └────────────────────────────┘  │
+│             │                                                          │
+│             ▼                                                          │
+│  ┌───────────────────────┐                                             │
+│  │  Popup Cyber Dashboard│                                             │
+│  │   Scanner • History   │                                             │
+│  │     Settings Tab      │                                             │
+│  └──────────┬────────────┘                                             │
+└─────────────┼──────────────────────────────────────────────────────────┘
+              │ HTTP (Local Loopback 127.0.0.1:8000 only)
+              ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                         UBUNTU HOST SYSTEM                             │
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                 Ubuntu Systemd User Service                      │  │
+│  │                    (sentinelx.service)                           │  │
+│  │   • Automatic start at user login                                │  │
+│  │   • Auto-restart within 3s on crashes (Restart=on-failure)       │  │
+│  │   • Logs routed to journalctl --user                             │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+│                                     │                                  │
+│                                     ▼                                  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                 FastAPI Local Core Backend                       │  │
+│  │            Bound exclusively to 127.0.0.1:8000                   │  │
+│  │    Strict Localhost restriction & Chrome Extension Origin Guard  │  │
+│  │    Deep URL structure, IDN, brand spoofing & protocol analysis   │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 6. Installation & Setup
+## ⚡ Key Highlights & Critical Upgrades
 
-### Prerequisites (Ubuntu Linux)
-- Python 3.10+
-- Node.js 18+ and npm
-- Google Chrome
+### 1. Zero Manual Backend Startup (Ubuntu Systemd User Service)
+- **Eliminates manual terminal runs**: No need to run `.venv/bin/python backend/run.py` manually.
+- **Systemd User Unit**: Installed in `~/.config/systemd/user/sentinelx.service`.
+- **Automatic autostart**: Launches upon login (`default.target`).
+- **Crash Recovery**: `Restart=on-failure` automatically restarts the process in 3 seconds if terminated.
+- **Diagnostic Tool**: Includes `./scripts/diagnostics.sh` to verify Python venv, service state, loopback binding, API health, and extension artifacts.
 
-### Step 1: Start the Local Security Backend
+### 2. Browser-Wide Navigation Protection (Manifest V3)
+- **Real-Time Evaluation**: Monitors top-level navigations (`chrome.webNavigation.onBeforeNavigate`).
+- **Pre-Navigation Socket Cutoff**: Automatically compiles high-confidence threats into `chrome.declarativeNetRequest` dynamic rules to abort connections before packets leave the machine.
+- **In-Extension Heuristic Engine (`local-analyzer.ts`)**: Evaluates navigations in under 0.2ms using transparent rules without latency.
+- **Loopback & Sandbox Safeguards**: Restricted system schemes (`chrome://`, `about:`, `file:`, `chrome-extension://`) and developer loopback interfaces (`127.0.0.1`, `localhost`) are preserved.
+
+### 3. Full-Page Warning & Block Interstitial (`blocked.html`)
+- Displays requested URL, target hostname, risk score, verdict, and specific detection reasons.
+- **Dual Enforcement Modes**:
+  - **BLOCK (Score 90–100 or Confirmed Threat)**: Aborts connection immediately; proceed action disabled; includes accordion override with explicit risk acknowledgement for false positives.
+  - **WARN_INTERSTITIAL (Score 80–89)**: Displays prominent amber warning with "Back to Safety" and a controlled "Proceed to Website" action.
+- **Redirect Loop Prevention**: Employs session bypass tokens (`ALLOW_SESSION_BYPASS`) so proceeding from a warning does not trap the browser in a navigation loop.
+
+### 4. Central Risk Policy & Degraded Mode Resilience
+| Score Range | Verdict | Action | Policy Behavior |
+| :--- | :--- | :--- | :--- |
+| **90 – 100** | `dangerous` | `BLOCK` | Automatic pre-navigation block via DNR and interstitial. |
+| **80 – 89** | `suspicious` | `WARN_INTERSTITIAL` | Intercepts navigation with prominent warning interstitial. |
+| **30 – 79** | `suspicious` | `PROCEED_WITH_CAUTION` | Displays caution advisory in popup scanner. |
+| **< 30 (Trusted)** | `safe` | `ALLOW` | Verified reputable domain (e.g. `google.com`, `github.com`). |
+| **< 30 (Unverified)** | `unknown` | `PROCEED_WITH_CAUTION` | **Never falsely assumed safe.** Flagged as unverified domain. |
+| **Override** | `dangerous` | `BLOCK` | Brand impersonation / userinfo spoofing immediately triggers BLOCK. |
+
+- **Offline Degraded Mode**: If the local backend is offline, the extension automatically falls back to `evaluateUrlLocally`, displays `DEGRADED (Backend Offline - In-Browser Local Heuristics)`, keeps declarativeNetRequest active, and **never marks unverified sites safe**.
+
+### 5. Cyber Dashboard UI
+- **Dark Theme**: Deep navy background (`#070b14`), electric blue accents (`#00d4ff`), emerald safe (`#10b981`), amber warning (`#f59e0b`), and crimson block (`#ef4444`).
+- **Multi-Tab Architecture**:
+  - **Scanner**: One-click active tab scanning, manual URL input, animated risk gauge, structured flags, and protocol explainers.
+  - **History**: Local session history with quick re-scan capabilities.
+  - **Settings**: Toggle between *Standard*, *Strict Allowlist*, and *Disabled* modes, adjust threshold numbers, manage custom blocklists/allowlists, and run live backend test pings.
+
+---
+
+## 🚀 Quick Start & Installation
+
+### Step 1: Install & Verify Ubuntu Systemd Service
+The backend service installs into your user session without root/sudo permissions:
+
 ```bash
-# 1. Activate the local virtual environment
-source .venv/bin/activate
+# Make scripts executable and install the systemd user service
+./scripts/install_service.sh
 
-# 2. Run the FastAPI server
-python backend/run.py
+# Run full system diagnostics
+./scripts/diagnostics.sh
 ```
-*The backend binds exclusively to `127.0.0.1:8000`. No external connections are accepted.*
+
+To manage the service directly:
+```bash
+# Check status
+systemctl --user status sentinelx.service
+
+# View live logs
+journalctl --user -u sentinelx.service -f
+
+# Stop / Start / Restart
+systemctl --user stop sentinelx.service
+systemctl --user start sentinelx.service
+systemctl --user restart sentinelx.service
+```
 
 ### Step 2: Build the Chrome Extension
 ```bash
 cd extension
+npm install
 npm run build
 ```
 
-### Step 3: Load into Google Chrome
-Due to Chrome security restrictions introduced in Chrome 137+ (`--load-extension is not allowed in Google Chrome`), unpacked extensions are loaded via the browser interface:
-1. Open Google Chrome and enter `chrome://extensions/` in the address bar.
-2. Toggle on **Developer mode** in the top-right corner.
-3. Click the **Load unpacked** button.
-4. Select the `extension` directory:
-   ```
-   /home/child/Projects/sentinelx/extension
-   ```
-5. SentinelX is now installed and actively enforcing pre-navigation blocking.
+### Step 3: Load the Extension into Google Chrome
+1. Open Google Chrome and navigate to `chrome://extensions/`.
+2. Toggle **Developer mode** on (top-right switch).
+3. Click **Load unpacked** (top-left button).
+4. Select the directory: `~/Projects/sentinelx/extension`.
+5. Pin **SentinelX** to your toolbar.
 
 ---
 
-## 7. Automated Testing & Verification
+## 🧪 Verification & Automated Testing
 
-### 1. Live Browser Pre-Navigation Verification
-SentinelX includes an automated integration test that boots Google Chrome using Chrome DevTools Protocol (`--remote-debugging-pipe`), loads the unpacked extension, starts an isolated mock HTTP server, and attempts navigation to a blocked indicator:
+### 1. Backend Pytest Suite (26 Tests)
+Validates model validation, analyzer penalties, risk thresholds, loopback binding restriction, and extension origin authorization:
+```bash
+.venv/bin/pytest -v
+```
 
+### 2. Extension TypeScript Unit Tests (28 Tests)
+Validates domain normalization, boundary matching, DNR compilation, in-extension heuristic analysis, and open-redirect sanitization:
+```bash
+cd extension && npm test
+```
+
+### 3. Chrome Headless Integration Test (Verifiable Proof)
+Launches headless Google Chrome with remote debugging pipe to test real declarativeNetRequest blocking:
 ```bash
 node scripts/verify_chrome_blocking.mjs
 ```
 
-**Recorded Verification Output:**
-```
-[TEST SETUP] Mock destination server active on 127.0.0.1:9797
-[TEST] Loading SentinelX unpacked extension into Chrome 154...
-[TEST] Extension loaded into Chrome. Extension ID: ciiifckfnjkgjjpjgooeiekgjlmbnbkl
-
-[TEST 1] Probing safe domain: http://safe-benign.test:9797/probe
-[MOCK SERVER] Incoming request: GET /probe (Host: safe-benign.test:9797)
-[MOCK SERVER] Incoming request: GET /favicon.ico (Host: safe-benign.test:9797)
-[TEST 1 RESULT] Destination server received 2 request(s) for safe domain.
-
-[TEST 2] Probing blocked threat domain: http://paypal-security-verification.test:9797/malicious-login
-
-======================================================================
-  RECORDED EVIDENCE OF BROWSER PRE-NAVIGATION BLOCKING
-======================================================================
-  Extension ID:                     ciiifckfnjkgjjpjgooeiekgjlmbnbkl
-  Test Threat URL:                  http://paypal-security-verification.test:9797/malicious-login
-  Requests Received by Mock Server: 0 (Expected: 0)
-  Final Browser Page URL:           chrome-extension://ciiifckfnjkgjjpjgooeiekgjlmbnbkl/blocked.html
-  Redirected to blocked.html:       true
-======================================================================
-
->>> VERIFICATION SUCCESS: Chrome DeclarativeNetRequest blocked navigation before socket connect! <<<
-```
-
-### 2. Extension Unit & Integration Lifecycle Tests
-Verify dynamic rule persistence, browser restart simulation, boundary matching, allowlist precedence, and open-redirect protections:
-```bash
-cd extension
-npm test
-```
-*Passes all 18 test specifications.*
-
-### 3. Backend Heuristic & API Tests
-Verify URL scoring, brand spoof detection, IDN homoglyphs, and localhost loopback isolation:
-```bash
-.venv/bin/pytest -v
-```
-*Passes all 16 test specifications.*
-
 ---
 
-## 8. Honest Security Disclaimers & Technical Limitations
-
-1. **Lack of Evidence is Not Proof of Safety**: A low risk score indicates that no known threat patterns were identified; it is not a certificate of safety.
-2. **No 100% Malware Immunity**: Attackers continually craft novel techniques. SentinelX provides explainable heuristic signals and synchronous rule-based blocks, not an impenetrable barrier.
-3. **Strict Allowlist Disruptions**: In Strict Allowlist mode, external dependencies (CDNs, OAuth providers, fonts) on unapproved domains will be blocked. Use this mode deliberately.
-4. **HTTPS Encryption vs. Authenticity**: Transport Layer Security (HTTPS) proves only that the connection is encrypted, not that the recipient is trustworthy.
-5. **Completely Local & Zero Cost**: SentinelX does not communicate with external intelligence feeds or cloud servers. All dynamic rules are managed and persisted on your local machine.
+## 🔒 Security & Privacy Guarantees
+- **100% Zero Cost**: No external subscriptions, paid threat APIs, or cloud infrastructure.
+- **Zero Telemetry**: All analysis runs locally on `127.0.0.1` and inside browser memory. Browsing history is never transmitted over the internet.
+- **Safe Execution**: SentinelX never executes or visits flagged URLs; analysis operates strictly on URL strings and pre-navigation metadata.

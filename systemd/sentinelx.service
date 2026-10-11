@@ -1,0 +1,17 @@
+[Unit]
+Description=SentinelX Local Security Core Engine
+Documentation=https://github.com/jeyar7492-glitch/SentinelX
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/child/Projects/sentinelx
+ExecStart=/home/child/Projects/sentinelx/.venv/bin/python /home/child/Projects/sentinelx/backend/run.py
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

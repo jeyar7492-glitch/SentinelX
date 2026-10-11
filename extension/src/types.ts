@@ -1,3 +1,12 @@
+export type Verdict = "safe" | "unknown" | "suspicious" | "dangerous";
+
+export type RecommendedAction =
+  | "BLOCK"
+  | "WARN_INTERSTITIAL"
+  | "PROCEED_WITH_CAUTION"
+  | "ALLOW"
+  | "UNABLE_TO_VERIFY";
+
 export type RiskClassification = "SAFE" | "SUSPICIOUS" | "HIGH RISK";
 
 export type RuleSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -18,9 +27,21 @@ export interface TriggeredRule {
   penalty: number;
 }
 
+export interface RiskPolicyConfig {
+  block_threshold: number;
+  warn_threshold: number;
+  allow_override_on_warning: boolean;
+}
+
 export interface AnalyzeResponse {
   url: string;
+  normalized_url?: string;
+  hostname?: string;
   risk_score: number;
+  verdict?: Verdict;
+  confidence?: string;
+  detection_reasons?: string[];
+  recommended_action?: RecommendedAction;
   classification: RiskClassification;
   summary: string;
   http_analysis: HttpAnalysis;
@@ -39,4 +60,16 @@ export interface HealthResponse {
   service: string;
   version: string;
   host_restriction: string;
+  risk_policy?: RiskPolicyConfig;
+}
+
+export interface ScanHistoryItem {
+  id: string;
+  url: string;
+  domain: string;
+  risk_score: number;
+  verdict: Verdict;
+  recommended_action: RecommendedAction;
+  timestamp: string;
+  detection_reasons: string[];
 }

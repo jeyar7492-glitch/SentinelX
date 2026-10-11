@@ -1,7 +1,7 @@
 /**
  * SentinelX Local Threat-Rule Manager
  * Manages domain normalization, threat rule lifecycle, boundary matching,
- * and declarativeNetRequest (DNR) dynamic rule compilation.
+ * central risk policy thresholds, and declarativeNetRequest (DNR) dynamic rule compilation.
  */
 
 export type ProtectionMode = "STANDARD" | "STRICT_ALLOWLIST" | "DISABLED";
@@ -11,6 +11,8 @@ export interface ProtectionSettings {
   mode: ProtectionMode;
   blockHighConfidence: boolean;
   warnSuspicious: boolean;
+  blockThreshold: number; // default 90 (BLOCK)
+  warnThreshold: number;  // default 80 (WARN_INTERSTITIAL)
   allowlist: string[];
   customBlocklist: string[];
 }
@@ -29,7 +31,7 @@ export interface ThreatRule {
 
 /**
  * Built-in high-confidence synthetic and known test threats.
- * Includes reserved testing domains (.test / .example) to ensure safe, verifiable testing.
+ * Uses reserved testing domains (.test / .example) to guarantee safe, verifiable testing.
  */
 export const SEED_THREAT_RULES: ThreatRule[] = [
   {
@@ -80,7 +82,7 @@ export const SEED_THREAT_RULES: ThreatRule[] = [
 
 /**
  * Domains and hosts that can NEVER be blocked by automated rules.
- * Defense-in-depth to protect vital system and local services.
+ * Defense-in-depth to protect vital system and local loopback services.
  */
 export const SAFEGUARD_HOSTS = new Set([
   "localhost",
@@ -119,7 +121,7 @@ export function normalizeDomain(input: string): string {
     clean = clean.split(":")[0];
   }
 
-  // Strip trailing dot
+  // Strip trailing dots
   clean = clean.replace(/\.+$/, "");
 
   // Convert potential non-ASCII IDN to Punycode via URL API
@@ -127,7 +129,7 @@ export function normalizeDomain(input: string): string {
     const dummy = new URL(`http://${clean}`);
     clean = dummy.hostname;
   } catch {
-    // If not a full URL parseable string, leave cleaned
+    // If not a full URL parseable string, keep cleaned
   }
 
   return clean;
@@ -211,14 +213,14 @@ export function compileDnrRules(
   // - Priority 1: Catch-all block rule on all main_frame navigations
   // - Priority 2: Allow rules for explicitly approved allowlist domains
   if (settings.mode === "STRICT_ALLOWLIST") {
-    // Catch-all block rule
+    // Catch-all block rule redirecting to safe interstitial
     dnrRules.push({
       id: 99999,
       priority: 1,
       action: {
         type: "redirect" as chrome.declarativeNetRequest.RuleActionType,
         redirect: {
-          extensionPath: "/blocked.html?reason=strict_allowlist",
+          extensionPath: "/blocked.html?type=block&reason=strict_allowlist",
         },
       },
       condition: {
@@ -289,7 +291,7 @@ export function compileDnrRules(
       action: {
         type: "redirect" as chrome.declarativeNetRequest.RuleActionType,
         redirect: {
-          extensionPath: `/blocked.html?domain=${encodeURIComponent(domain)}&rule=${encodeURIComponent(rule.name)}&id=${rule.id}`,
+          extensionPath: `/blocked.html?type=block&domain=${encodeURIComponent(domain)}&rule=${encodeURIComponent(rule.name)}&id=${rule.id}`,
         },
       },
       condition: {
