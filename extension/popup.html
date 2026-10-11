@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelX - Local URL Security</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <img src="icons/icon-48.png" alt="SentinelX" class="brand-logo" width="28" height="28">
+        <div>
+          <h1 class="brand-title">SentinelX</h1>
+          <span class="brand-subtitle">Local Security & Threat Blocker</span>
+        </div>
+      </div>
+      <div class="backend-status-badge">
+        <span id="backend-status" class="status-indicator"></span>
+        <span id="backend-status-text">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="popup-nav">
+      <button id="nav-scan" class="nav-tab active">
+        🔍 URL Scanner
+      </button>
+      <button id="nav-settings" class="nav-tab">
+        🛡️ Protection Rules
+      </button>
+    </nav>
+
+    <!-- VIEW 1: URL SCANNER -->
+    <div id="view-scanner" class="view-panel active">
+      <!-- Scan Input Form -->
+      <section class="scan-bar">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            id="url-input"
+            placeholder="Enter or paste URL (http:// or https://)..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button id="scan-btn" class="btn-primary" title="Analyze entered URL">Analyze</button>
+        </div>
+        <div class="quick-actions">
+          <button id="scan-current-btn" class="btn-secondary">
+            <span class="btn-icon">↻</span> Rescan Active Tab
+          </button>
+        </div>
+      </section>
+
+      <!-- Loading State -->
+      <div id="loading-state" class="loading-state" style="display: none;">
+        <div class="spinner"></div>
+        <p>Running local heuristic security checks...</p>
+      </div>
+
+      <!-- Error Banner -->
+      <div id="error-card" class="error-card" style="display: none;">
+        <div class="error-header">
+          <span class="error-icon">⚠️</span>
+          <strong class="error-title">Notice</strong>
+        </div>
+        <p id="error-message" class="error-body"></p>
+      </div>
+
+      <!-- Results Container -->
+      <main id="results-container" class="results-container" style="display: none;">
+
+        <!-- Target URL Header -->
+        <div class="target-url-box">
+          <span class="target-label">Scanned Target:</span>
+          <div id="current-url-text" class="target-url"></div>
+        </div>
+
+        <!-- Quick Block Action (For High Risk Findings) -->
+        <div id="quick-block-bar" class="quick-block-bar" style="display: none;">
+          <span class="quick-block-text">High-confidence threat identified:</span>
+          <button id="btn-quick-block" class="btn-action-block">
+            ⛔ Add to Pre-Navigation Blocklist
+          </button>
+        </div>
+
+        <!-- Risk Score Card -->
+        <div class="score-card">
+          <div class="score-card-top">
+            <div class="score-display">
+              <span class="score-label">Risk Assessment</span>
+              <span id="risk-score-value" class="score-value">0/100</span>
+            </div>
+            <div id="status-badge" class="classification-badge safe">SAFE</div>
+          </div>
+
+          <div class="score-bar-track">
+            <div id="risk-score-bar" class="score-bar-fill safe" style="width: 5%;"></div>
+          </div>
+
+          <p id="result-summary" class="result-summary-text"></p>
+        </div>
+
+        <!-- HTTP vs HTTPS Explainer Card (Critical Security Nuance) -->
+        <section class="card protocol-card">
+          <div class="card-header">
+            <span class="card-title">Transport Security (HTTP vs HTTPS)</span>
+            <span id="http-badge" class="protocol-badge encrypted">HTTPS</span>
+          </div>
+          <p id="http-summary" class="protocol-summary"></p>
+          <div class="nuance-alert">
+            <strong class="alert-heading">⚠️ Security Fact:</strong>
+            <p id="http-explanation" class="alert-content"></p>
+          </div>
+        </section>
+
+        <!-- Heuristic Detection Rules Breakdown -->
+        <section class="card rules-card">
+          <div class="card-header">
+            <span class="card-title">Transparent Heuristic Detections</span>
+          </div>
+          <div id="rules-container" class="rules-list">
+            <!-- Populated dynamically -->
+          </div>
+        </section>
+
+        <!-- Safe Indicators -->
+        <section class="card safe-indicators-card">
+          <div class="card-header">
+            <span class="card-title">Verified Positive Indicators</span>
+          </div>
+          <div id="safe-indicators-container" class="indicators-list">
+            <!-- Populated dynamically -->
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- VIEW 2: PROTECTION RULES & SETTINGS -->
+    <div id="view-settings" class="view-panel" style="display: none;">
+      <!-- Mode Selection Card -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <span class="card-title">Protection Mode</span>
+          <span id="dnr-status-pill" class="pill-active">Enforcing Rules</span>
+        </div>
+
+        <div class="mode-options">
+          <label class="mode-option">
+            <input type="radio" name="protection-mode" value="STANDARD" checked id="mode-standard">
+            <div class="mode-desc">
+              <strong>Standard Protection (Default)</strong>
+              <span>Block confirmed high-confidence threats via DNR before navigation. Warn on suspicious URLs.</span>
+            </div>
+          </label>
+
+          <label class="mode-option">
+            <input type="radio" name="protection-mode" value="STRICT_ALLOWLIST" id="mode-strict">
+            <div class="mode-desc">
+              <strong class="strict-highlight">Strict Allowlist Mode</strong>
+              <span>Block all websites except your explicitly approved allowlist. (Warning: Disables general browsing).</span>
+            </div>
+          </label>
+
+          <label class="mode-option">
+            <input type="radio" name="protection-mode" value="DISABLED" id="mode-disabled">
+            <div class="mode-desc">
+              <strong>Protection Disabled</strong>
+              <span>No pre-navigation blocking. On-demand scanning remains available.</span>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <!-- Manage Domains Section -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <span class="card-title">Domain Policy Manager</span>
+        </div>
+
+        <div class="domain-input-box">
+          <input
+            type="text"
+            id="manage-domain-input"
+            placeholder="domain.com (e.g., example.test)"
+            autocomplete="off"
+          >
+          <div class="domain-btn-group">
+            <button id="btn-add-block" class="btn-sm btn-danger">+ Block</button>
+            <button id="btn-add-allow" class="btn-sm btn-success">+ Allow</button>
+          </div>
+        </div>
+
+        <!-- Custom Blocklist -->
+        <div class="list-section">
+          <div class="list-header">
+            <span>Custom Blocked Domains (<span id="custom-block-count">0</span>)</span>
+          </div>
+          <div id="custom-blocklist-container" class="domain-chip-list">
+            <span class="empty-list-note">No custom blocked domains.</span>
+          </div>
+        </div>
+
+        <!-- Allowlist -->
+        <div class="list-section">
+          <div class="list-header">
+            <span>Approved Allowlist (<span id="allowlist-count">0</span>)</span>
+          </div>
+          <div id="allowlist-container" class="domain-chip-list">
+            <span class="empty-list-note">No allowlist overrides.</span>
+          </div>
+        </div>
+
+        <!-- Built-in Signatures Notice -->
+        <div class="system-rules-footer">
+          <span>🛡️ <strong id="system-rules-count">4</strong> Built-In High-Confidence Test Signatures Active</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Local-Only MVP</span>
+      <span>•</span>
+      <span>Pre-Navigation DNR Blocking</span>
+      <span>•</span>
+      <span>Strict 127.0.0.1</span>
+    </footer>
+  </div>
+
+  <script type="module" src="dist/popup.js"></script>
+</body>
+</html>

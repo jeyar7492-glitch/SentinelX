@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelX — Threat Blocked</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <div class="blocked-container">
+    <header class="blocked-header">
+      <div class="brand">
+        <img src="icons/icon-48.png" alt="SentinelX" class="brand-logo" width="32" height="32">
+        <div class="brand-text">
+          <h1 class="brand-title">SentinelX</h1>
+          <span class="brand-subtitle">Pre-Navigation Protection Engine</span>
+        </div>
+      </div>
+      <div class="protection-badge">
+        <span class="shield-icon">🛡️</span>
+        <span>Local Enforcement Active</span>
+      </div>
+    </header>
+
+    <main class="alert-card">
+      <div class="hazard-icon-wrapper">
+        <div class="hazard-circle">⚠️</div>
+      </div>
+
+      <h2 class="alert-heading">Website Blocked for Your Protection</h2>
+      <p class="alert-subheading">
+        SentinelX aborted this connection before any data was sent or received. The target matches high-confidence phishing indicators or local security policies.
+      </p>
+
+      <!-- Target details -->
+      <section class="details-box">
+        <div class="detail-row">
+          <span class="detail-label">Blocked Host:</span>
+          <span id="target-domain" class="detail-value host-highlight">Loading...</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Matched Policy:</span>
+          <span id="matched-rule" class="detail-value">Evaluating policy...</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Severity Level:</span>
+          <span id="rule-severity" class="severity-tag critical">CRITICAL RISK</span>
+        </div>
+        <div class="detail-row reason-row">
+          <span class="detail-label">Threat Explanation:</span>
+          <p id="threat-reason" class="reason-text">Analyzing blocked parameters...</p>
+        </div>
+      </section>
+
+      <!-- Safe Navigation Actions -->
+      <div class="action-buttons">
+        <button id="btn-back-safety" class="btn btn-primary">
+          ← Return to Safety
+        </button>
+        <button id="btn-close-tab" class="btn btn-secondary">
+          Close This Tab
+        </button>
+      </div>
+
+      <!-- Controlled False Positive Override Accordion -->
+      <section class="override-section">
+        <button id="btn-toggle-override" class="override-toggle">
+          <span>False positive or unexpected block?</span>
+          <span id="override-arrow">▼</span>
+        </button>
+
+        <div id="override-content" class="override-panel" style="display: none;">
+          <p class="override-warning">
+            <strong>Security Warning:</strong> Threat actors routinely spoof reputable login portals and bank websites.
+            Proceeding will connect directly to the destination server. Never enter passwords or personal data.
+          </p>
+
+          <label class="override-checkbox-label">
+            <input type="checkbox" id="chk-acknowledge">
+            <span>I understand the security risks and confirm I wish to unblock this domain.</span>
+          </label>
+
+          <div class="override-action-bar">
+            <button id="btn-unblock-proceed" class="btn btn-warning" disabled>
+              Allow Domain & Proceed
+            </button>
+            <button id="btn-open-settings" class="btn btn-outline">
+              Review in Settings
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="blocked-footer">
+      <span>Zero External Telemetry</span>
+      <span>•</span>
+      <span>Local Rule Enforcement</span>
+      <span>•</span>
+      <span>Strict 127.0.0.1 Core</span>
+    </footer>
+  </div>
+
+  <script type="module" src="dist/blocked.js"></script>
+</body>
+</html>

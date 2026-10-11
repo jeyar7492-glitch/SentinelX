@@ -1,0 +1,17 @@
+{
+  "name": "sentinelx-extension",
+  "version": "1.0.0",
+  "description": "Chrome Manifest V3 Extension for SentinelX Local URL Security MVP",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "typescript": "^5.6.3"
+  }
+}
