@@ -176,9 +176,13 @@ btnProceedWarning.addEventListener("click", () => {
     if (!isValidWebUrl(dest) || dest.includes(chrome.runtime.id)) {
       dest = `https://${currentBlockedDomain}`;
     }
-    // Set temporary session bypass in background service worker to prevent redirect loop
+    // Set temporary single-use session bypass in background service worker to prevent redirect loop on this transition
     chrome.runtime.sendMessage(
-      { action: "ALLOW_SESSION_BYPASS", domain: currentBlockedDomain },
+      {
+        action: "ALLOW_SESSION_BYPASS",
+        domain: currentBlockedDomain,
+        url: dest,
+      },
       () => {
         window.location.href = dest;
       }

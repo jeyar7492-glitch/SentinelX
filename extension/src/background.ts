@@ -41,30 +41,154 @@ export interface BlockedEvent {
   timestamp: string;
 }
 
-// In-memory session bypass to prevent redirect loops when user explicitly proceeds
-const sessionBypasses = new Map<string, number>();
-
-export function addSessionBypass(domain: string, tabId?: number): void {
-  const norm = normalizeDomain(domain);
-  const expiry = Date.now() + 5 * 60 * 1000; // 5 minute bypass
-  sessionBypasses.set(norm, expiry);
-  if (tabId) {
-    sessionBypasses.set(`${tabId}:${norm}`, expiry);
+/**
+ * Normalizes a URL for precise single-navigation matching.
+ * Trims whitespace, lowercases scheme & host, strips trailing slash from root/path.
+ */
+export function normalizeUrlForBypass(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== "string") return "";
+  try {
+    const u = new URL(rawUrl.trim());
+    const scheme = u.protocol.toLowerCase();
+    const host = u.hostname.toLowerCase();
+    const port = u.port ? `:${u.port}` : "";
+    let pathname = u.pathname || "/";
+    if (pathname.length > 1 && pathname.endsWith("/")) {
+      pathname = pathname.slice(0, -1);
+    }
+    return `${scheme}//${host}${port}${pathname}${u.search}`;
+  } catch {
+    return rawUrl.trim().toLowerCase();
   }
 }
 
-export function isSessionBypassed(domain: string, tabId?: number): boolean {
-  const norm = normalizeDomain(domain);
+export interface OneTimeBypassEntry {
+  tabId: number;
+  normalizedUrl: string;
+  normalizedDomain: string;
+  expiresAt: number;
+}
+
+// Scoped strictly to tabId:normalizedUrl or tabId:domain:normalizedDomain.
+// Entries are SINGLE-USE and expire in 15 seconds.
+const oneTimeNavigationBypasses = new Map<string, OneTimeBypassEntry>();
+
+// In-flight deduplication tracker to prevent duplicate events in the same navigation from looping.
+const inFlightNavigationRedirects = new Map<string, number>();
+
+/**
+ * Register a strict one-time navigation bypass for a single tab transition.
+ * Never grants global or multi-minute domain immunity.
+ */
+export function addOneTimeBypass(url: string, tabId?: number, domain?: string): void {
+  if (tabId === undefined || tabId === null) return;
+  const targetUrl = url ? normalizeUrlForBypass(url) : "";
+  let targetDomain = domain ? normalizeDomain(domain) : "";
+  if (!targetDomain && url) {
+    try {
+      targetDomain = normalizeDomain(new URL(url).hostname);
+    } catch {
+      targetDomain = "";
+    }
+  }
+  const expiresAt = Date.now() + 15 * 1000; // 15 seconds single-use transition window
+
+  const entry: OneTimeBypassEntry = {
+    tabId,
+    normalizedUrl: targetUrl,
+    normalizedDomain: targetDomain,
+    expiresAt,
+  };
+
+  if (targetUrl) {
+    oneTimeNavigationBypasses.set(`${tabId}:${targetUrl}`, entry);
+  }
+  if (targetDomain) {
+    oneTimeNavigationBypasses.set(`${tabId}:domain:${targetDomain}`, entry);
+  }
+}
+
+/**
+ * Check and IMMEDIATELY CONSUME a one-time navigation bypass.
+ * If a matching, non-expired one-time bypass exists for this tab and URL/domain,
+ * it is deleted immediately and returns true.
+ * All subsequent checks for repeat visits, reloads, or new tabs return false.
+ */
+export function consumeOneTimeBypass(url: string, tabId?: number): boolean {
+  if (tabId === undefined || tabId === null) return false;
   const now = Date.now();
-  if (tabId && sessionBypasses.has(`${tabId}:${norm}`)) {
-    if (sessionBypasses.get(`${tabId}:${norm}`)! > now) return true;
-    sessionBypasses.delete(`${tabId}:${norm}`);
+  const targetUrl = normalizeUrlForBypass(url);
+  let domain = "";
+  try {
+    domain = normalizeDomain(new URL(url).hostname);
+  } catch {
+    domain = "";
   }
-  if (sessionBypasses.has(norm)) {
-    if (sessionBypasses.get(norm)! > now) return true;
-    sessionBypasses.delete(norm);
+
+  const urlKey = `${tabId}:${targetUrl}`;
+  const domainKey = domain ? `${tabId}:domain:${domain}` : "";
+
+  let matched = false;
+
+  if (oneTimeNavigationBypasses.has(urlKey)) {
+    const entry = oneTimeNavigationBypasses.get(urlKey)!;
+    if (entry.expiresAt > now) {
+      matched = true;
+    }
+  } else if (domainKey && oneTimeNavigationBypasses.has(domainKey)) {
+    const entry = oneTimeNavigationBypasses.get(domainKey)!;
+    if (entry.expiresAt > now && (!entry.normalizedUrl || entry.normalizedUrl === targetUrl)) {
+      matched = true;
+    }
   }
-  return false;
+
+  // Always consume and delete any pending tokens for this tab upon use
+  oneTimeNavigationBypasses.delete(urlKey);
+  if (domainKey) {
+    oneTimeNavigationBypasses.delete(domainKey);
+  }
+
+  return matched;
+}
+
+/**
+ * Legacy compatibility functions.
+ */
+export function addSessionBypass(domain: string, tabId?: number, url?: string): void {
+  addOneTimeBypass(url || `https://${domain}`, tabId, domain);
+}
+
+export function isSessionBypassed(domain: string, tabId?: number, url?: string): boolean {
+  return consumeOneTimeBypass(url || `https://${domain}`, tabId);
+}
+
+/**
+ * Clean up tab-scoped in-flight and bypass entries.
+ */
+export function clearTabState(tabId: number): void {
+  for (const [key, entry] of oneTimeNavigationBypasses.entries()) {
+    if (entry.tabId === tabId) {
+      oneTimeNavigationBypasses.delete(key);
+    }
+  }
+  for (const key of inFlightNavigationRedirects.keys()) {
+    if (key.startsWith(`${tabId}:`)) {
+      inFlightNavigationRedirects.delete(key);
+    }
+  }
+}
+
+export function clearInFlightRedirect(tabId: number): void {
+  for (const key of inFlightNavigationRedirects.keys()) {
+    if (key.startsWith(`${tabId}:`)) {
+      inFlightNavigationRedirects.delete(key);
+    }
+  }
+}
+
+export function clearAllBypasses(): void {
+  oneTimeNavigationBypasses.clear();
+  inFlightNavigationRedirects.clear();
 }
 
 /**
@@ -198,8 +322,9 @@ export async function findMatchingRule(targetDomain: string): Promise<ThreatRule
  * Web Navigation listener: Records blocked events in session storage
  * to provide rich context to blocked.html when DNR intercepts or redirects navigation.
  */
-chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
-  if (details.frameId !== 0) return; // Only top-level main_frame navigations
+if (typeof chrome !== "undefined" && chrome.webNavigation?.onBeforeNavigate) {
+  chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+    if (details.frameId !== 0) return; // Only top-level main_frame navigations
 
   try {
     if (!details.url || !isValidWebUrl(details.url)) return;
@@ -222,8 +347,10 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
     const settings = await getSettings();
     if (!settings.protectionEnabled || settings.mode === "DISABLED") return;
 
-    // Check if user explicitly allowed navigation in this session
-    if (isSessionBypassed(domain, details.tabId)) return;
+    // Check if user explicitly authorized this single navigation transition in this tab
+    if (consumeOneTimeBypass(details.url, details.tabId)) {
+      return;
+    }
 
     // Check user allowlist
     for (const allowed of settings.allowlist) {
@@ -232,10 +359,18 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
       }
     }
 
+    // Deduplication check for in-flight interception on this exact tab and URL
+    const inFlightKey = `${details.tabId}:${normalizeUrlForBypass(details.url)}`;
+    const inFlightExpiry = inFlightNavigationRedirects.get(inFlightKey);
+    if (inFlightExpiry && inFlightExpiry > Date.now()) {
+      return;
+    }
+
     // In Strict Allowlist Mode:
     if (settings.mode === "STRICT_ALLOWLIST") {
       const isAllowed = settings.allowlist.some((a) => matchesDomainBoundary(domain, a));
       if (!isAllowed) {
+        inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
         const event: BlockedEvent = {
           url: details.url,
           domain,
@@ -262,6 +397,7 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
     // 1. Check existing threat rules or custom blocklist
     const matchedRule = await findMatchingRule(domain);
     if (matchedRule) {
+      inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
       const event: BlockedEvent = {
         url: details.url,
         domain,
@@ -287,6 +423,7 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
     const evaluation = evaluateUrlLocally(details.url, settings.blockThreshold, settings.warnThreshold);
 
     if (evaluation.verdict === "dangerous" || evaluation.risk_score >= settings.blockThreshold) {
+      inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
       const event: BlockedEvent = {
         url: details.url,
         domain,
@@ -340,6 +477,7 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
 
     if (evaluation.verdict === "suspicious" && evaluation.risk_score >= settings.warnThreshold) {
       if (settings.warnSuspicious) {
+        inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
         const warningEvent: BlockedEvent = {
           url: details.url,
           domain,
@@ -376,17 +514,19 @@ chrome.webNavigation?.onBeforeNavigate?.addListener(async (details) => {
   } catch {
     // Non-fatal navigation tracking error
   }
-});
+  });
+}
 
 /**
  * Handle secure internal messages between popup / options / blocked pages and the service worker.
  * Webpages CANNOT send messages (restricted to extension origin).
  */
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (sender.id !== chrome.runtime.id) {
-    sendResponse({ error: "Unauthorized sender" });
-    return false;
-  }
+if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (sender.id !== chrome.runtime.id) {
+      sendResponse({ error: "Unauthorized sender" });
+      return false;
+    }
 
   (async () => {
     switch (message.action) {
@@ -528,10 +668,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
-      case "ALLOW_SESSION_BYPASS": {
-        const domain = normalizeDomain(message.domain);
-        if (domain) {
-          addSessionBypass(domain, sender.tab?.id);
+      case "ALLOW_SESSION_BYPASS":
+      case "ALLOW_ONE_TIME_BYPASS": {
+        const domain = message.domain ? normalizeDomain(message.domain) : "";
+        const url = message.url || "";
+        const tabId = sender.tab?.id;
+        if (domain || url) {
+          addOneTimeBypass(url || (domain ? `https://${domain}` : ""), tabId, domain);
         }
         sendResponse({ success: true });
         break;
@@ -543,15 +686,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })();
 
   return true; // Keep message channel open for async response
-});
+  });
+}
 
 // Extension lifecycle hooks
-chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[SentinelX] Initializing security rules on install...");
-  await syncDnrRules();
-});
+if (typeof chrome !== "undefined") {
+  chrome.runtime?.onInstalled?.addListener(async () => {
+    console.log("[SentinelX] Initializing security rules on install...");
+    await syncDnrRules();
+  });
 
-chrome.runtime.onStartup.addListener(async () => {
-  console.log("[SentinelX] Restoring security rules on browser startup...");
-  await syncDnrRules();
-});
+  chrome.runtime?.onStartup?.addListener(async () => {
+    console.log("[SentinelX] Restoring security rules on browser startup...");
+    await syncDnrRules();
+  });
+
+  // Clean up tab-scoped bypasses and deduplication state when tab closes
+  chrome.tabs?.onRemoved?.addListener((tabId) => {
+    clearTabState(tabId);
+  });
+
+  // Clear in-flight navigation markers once a main-frame navigation commits
+  chrome.webNavigation?.onCommitted?.addListener((details) => {
+    if (details.frameId === 0) {
+      clearInFlightRedirect(details.tabId);
+    }
+  });
+}

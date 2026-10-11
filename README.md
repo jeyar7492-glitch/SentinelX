@@ -76,7 +76,7 @@
 - **Dual Enforcement Modes**:
   - **BLOCK (Score 90–100 or Confirmed Threat)**: Aborts connection immediately; proceed action disabled; includes accordion override with explicit risk acknowledgement for false positives.
   - **WARN_INTERSTITIAL (Score 80–89)**: Displays prominent amber warning with "Back to Safety" and a controlled "Proceed to Website" action.
-- **Redirect Loop Prevention**: Employs session bypass tokens (`ALLOW_SESSION_BYPASS`) so proceeding from a warning does not trap the browser in a navigation loop.
+- **Strict Single-Use Transition Tokens & Repeat Protection**: Proceeding from a warning issues a strict single-use navigation token (`ALLOW_SESSION_BYPASS`) scoped only to that immediate tab transition. Warnings are never permanently suppressed: repeat visits, page reloads, new tabs, and different paths are guaranteed to re-trigger the security warning.
 
 ### 4. Central Risk Policy & Degraded Mode Resilience
 | Score Range | Verdict | Action | Policy Behavior |
