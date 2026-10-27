@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,10 +19,16 @@
             <h1 class="brand-title">SentinelX</h1>
             <span class="version-tag">v2.0</span>
           </div>
-          <span class="brand-subtitle">Real-Time Browser Protection</span>
+          <span class="brand-subtitle">Real-Time Cyber Shield</span>
         </div>
       </div>
-      <div class="header-status-box">
+      <div class="header-action-group">
+        <button id="theme-toggle-btn" class="btn-header-icon" title="Toggle Light/Dark Theme" aria-label="Toggle Theme">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <button id="btn-open-dashboard" class="btn-header-icon" title="Open Full Dashboard in Tab" aria-label="Open Full Dashboard">
+          <span class="open-icon">↗</span>
+        </button>
         <div class="backend-status-badge" id="backend-status-pill" title="Local FastAPI Core Status">
           <span id="backend-status" class="status-indicator checking"></span>
           <span id="backend-status-text">Checking Core...</span>
@@ -30,24 +36,27 @@
       </div>
     </header>
 
-    <!-- Global Protection Status Banner -->
-    <div id="global-protection-banner" class="protection-banner active">
+    <!-- 3-State Protection Status Banner -->
+    <div id="global-protection-banner" class="protection-banner active" role="status">
       <div class="banner-left">
         <span class="pulse-dot"></span>
-        <span id="protection-status-label" class="banner-text">Real-Time Protection Active</span>
+        <div class="banner-text-group">
+          <span id="protection-status-label" class="banner-text">Protected</span>
+          <span id="protection-status-sub" class="banner-subtext">Real-time pre-navigation DNR & local engine active</span>
+        </div>
       </div>
       <span id="mode-badge-pill" class="mode-pill">STANDARD DNR</span>
     </div>
 
     <!-- Navigation Tabs -->
-    <nav class="popup-nav">
-      <button id="nav-scan" class="nav-tab active">
+    <nav class="popup-nav" role="tablist">
+      <button id="nav-scan" class="nav-tab active" role="tab" aria-selected="true">
         <span class="tab-icon">🔍</span> Scanner
       </button>
-      <button id="nav-history" class="nav-tab">
+      <button id="nav-history" class="nav-tab" role="tab" aria-selected="false">
         <span class="tab-icon">🕒</span> History
       </button>
-      <button id="nav-settings" class="nav-tab">
+      <button id="nav-settings" class="nav-tab" role="tab" aria-selected="false">
         <span class="tab-icon">🛡️</span> Settings
       </button>
     </nav>
@@ -74,19 +83,20 @@
             placeholder="Enter URL to analyze (http:// or https://)..."
             autocomplete="off"
             spellcheck="false"
+            aria-label="URL to analyze"
           >
           <button id="scan-btn" class="btn-primary" title="Analyze entered URL">Analyze</button>
         </div>
       </section>
 
       <!-- Loading State -->
-      <div id="loading-state" class="loading-state" style="display: none;">
+      <div id="loading-state" class="loading-state" style="display: none;" aria-live="polite">
         <div class="spinner"></div>
         <p class="loading-text">Analyzing URL structure & local indicators...</p>
       </div>
 
       <!-- Offline / Error Notice -->
-      <div id="error-card" class="error-card" style="display: none;">
+      <div id="error-card" class="error-card" style="display: none;" role="alert">
         <div class="error-header">
           <span class="error-icon">⚠️</span>
           <strong id="error-title" class="error-title">Backend Offline</strong>
@@ -136,7 +146,7 @@
             </div>
           </div>
 
-          <!-- Animated Progress Bar -->
+          <!-- Progress Bar -->
           <div class="score-bar-track">
             <div id="risk-score-bar" class="score-bar-fill safe" style="width: 5%;"></div>
           </div>
@@ -151,7 +161,10 @@
         <!-- Transparent Detection Reasons -->
         <section class="card rules-card">
           <div class="card-header">
-            <span class="card-title">Detection Reasons & Flags</span>
+            <div class="card-title-group">
+              <span class="card-title">Detection Reasons & Evidence</span>
+              <span class="card-subtitle">Transparent signal audit</span>
+            </div>
             <span id="flag-count-pill" class="badge-count">0 Flags</span>
           </div>
           <div id="rules-container" class="rules-list">
@@ -162,7 +175,10 @@
         <!-- Transport Security (HTTP vs HTTPS Deep Dive) -->
         <section class="card protocol-card">
           <div class="card-header">
-            <span class="card-title">Transport Encryption</span>
+            <div class="card-title-group">
+              <span class="card-title">Transport Security</span>
+              <span class="card-subtitle">Channel encryption status</span>
+            </div>
             <span id="http-badge" class="protocol-badge encrypted">HTTPS (TLS)</span>
           </div>
           <p id="http-summary" class="protocol-summary"></p>
@@ -175,7 +191,10 @@
         <!-- Verified Positive Indicators -->
         <section class="card safe-indicators-card">
           <div class="card-header">
-            <span class="card-title">Verified Positive Indicators</span>
+            <div class="card-title-group">
+              <span class="card-title">Verified Positive Indicators</span>
+              <span class="card-subtitle">Structural trust signals</span>
+            </div>
           </div>
           <div id="safe-indicators-container" class="indicators-list">
             <!-- Populated dynamically -->
@@ -187,10 +206,21 @@
     <!-- VIEW 2: RECENT SCAN HISTORY -->
     <div id="view-history" class="view-panel" style="display: none;">
       <section class="card history-card">
-        <div class="card-header">
-          <span class="card-title">Recent Local Scans</span>
+        <div class="card-header history-header">
+          <div class="card-title-group">
+            <span class="card-title">Security Activity Log</span>
+            <span class="card-subtitle">Real scans & verdicts from this device</span>
+          </div>
           <button id="btn-clear-history" class="btn-text-danger">Clear History</button>
         </div>
+
+        <!-- Filter Tabs -->
+        <div class="history-filter-bar">
+          <button id="history-filter-all" class="history-filter-tab active" data-filter="all">All Scans</button>
+          <button id="history-filter-blocked" class="history-filter-tab" data-filter="blocked">Blocked Threats</button>
+          <button id="history-filter-warnings" class="history-filter-tab" data-filter="warnings">Warnings</button>
+        </div>
+
         <p class="section-desc">Stored locally in Chrome memory. Never sent to any external server.</p>
 
         <div id="history-items-container" class="history-list">
@@ -204,7 +234,10 @@
       <!-- Main Toggle & Mode Selector -->
       <section class="card settings-card">
         <div class="card-header">
-          <span class="card-title">Protection Modes</span>
+          <div class="card-title-group">
+            <span class="card-title">Protection Modes</span>
+            <span class="card-subtitle">Pre-navigation browser defense</span>
+          </div>
           <span id="dnr-status-pill" class="pill-active">Enforcing DNR</span>
         </div>
 
@@ -235,16 +268,60 @@
         </div>
       </section>
 
+      <!-- Advanced Threat Policies -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-title">Threat Interception Policies</span>
+            <span class="card-subtitle">Configure specialized protections</span>
+          </div>
+        </div>
+
+        <div class="setting-toggle-row">
+          <div class="toggle-text">
+            <strong>Unknown Publisher Interception</strong>
+            <span>Show an amber warning with a 3-second safety countdown before opening unverified website destinations.</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-unknown-publisher">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Appearance -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-title">Appearance & Theme</span>
+            <span class="card-subtitle">Interface styling</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="select-theme" class="setting-label-block">
+            <strong>Color Theme</strong>
+            <span>Choose light, dark, or system preference</span>
+          </label>
+          <select id="select-theme" class="select-input">
+            <option value="dark">Dark (Midnight Navy)</option>
+            <option value="light">Light (Clean Slate)</option>
+            <option value="system">Follow System</option>
+          </select>
+        </div>
+      </section>
+
       <!-- Configurable Risk Thresholds -->
       <section class="card settings-card">
         <div class="card-header">
-          <span class="card-title">Central Risk Policy Thresholds</span>
+          <div class="card-title-group">
+            <span class="card-title">Central Risk Policy Thresholds</span>
+            <span class="card-subtitle">Scoring thresholds for automated actions</span>
+          </div>
         </div>
-        <p class="section-desc">Adjust thresholds for automated enforcement actions:</p>
 
         <div class="threshold-row">
           <div class="threshold-label-box">
-            <strong>Block Threshold (90–100)</strong>
+            <strong>Block Threshold (85–100)</strong>
             <span>Automatic pre-navigation block</span>
           </div>
           <div class="threshold-input-wrapper">
@@ -254,7 +331,7 @@
 
         <div class="threshold-row">
           <div class="threshold-label-box">
-            <strong>Warning Interstitial (80–89)</strong>
+            <strong>Warning Interstitial (60–89)</strong>
             <span>Displays full warning before opening</span>
           </div>
           <div class="threshold-input-wrapper">
@@ -267,7 +344,10 @@
       <!-- Domain Policy Manager -->
       <section class="card settings-card">
         <div class="card-header">
-          <span class="card-title">Domain Lists Manager</span>
+          <div class="card-title-group">
+            <span class="card-title">Domain Lists Manager</span>
+            <span class="card-subtitle">Manual overrides for DNR blocking</span>
+          </div>
         </div>
 
         <div class="domain-input-box">
@@ -276,6 +356,7 @@
             id="manage-domain-input"
             placeholder="domain.com (e.g., example.test)"
             autocomplete="off"
+            aria-label="Domain to manage"
           >
           <div class="domain-btn-group">
             <button id="btn-add-block" class="btn-sm btn-danger">+ Block</button>
@@ -312,7 +393,10 @@
       <!-- Troubleshooting & Backend Status -->
       <section class="card settings-card troubleshooting-card">
         <div class="card-header">
-          <span class="card-title">System & Backend Health</span>
+          <div class="card-title-group">
+            <span class="card-title">System & Backend Health</span>
+            <span class="card-subtitle">Local runtime telemetry</span>
+          </div>
           <button id="btn-ping-backend" class="btn-sm btn-outline">Test Ping</button>
         </div>
         <div class="system-health-grid">

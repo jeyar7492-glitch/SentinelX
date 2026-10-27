@@ -220,3 +220,43 @@ class TestApiEndpoints:
             headers={"Origin": "chrome-extension://abcdefghijklmnop1234567890"},
         )
         assert response.status_code == 200
+
+
+class TestStructuredDetectionEvidence:
+    """Validates structured detection evidence types, sources, and confidence metadata."""
+
+    def test_structured_evidence_fields_on_rules(self):
+        from backend.app.models import EvidenceSource, EvidenceType
+
+        result = analyze_url("http://192.168.1.100/admin-login-reset?redirect=https://evil.test")
+        assert len(result.triggered_rules) >= 2
+        for rule in result.triggered_rules:
+            assert isinstance(rule.evidence_type, EvidenceType)
+            assert isinstance(rule.source, EvidenceSource)
+            assert rule.confidence in ("HIGH", "MEDIUM", "LOW")
+
+        # Specific rule evidence verification
+        ip_rule = next(r for r in result.triggered_rules if r.rule_id == "RULE_RAW_IP_HOST")
+        assert ip_rule.evidence_type == EvidenceType.CONFIRMED
+        assert ip_rule.source == EvidenceSource.LOCAL_HEURISTIC
+        assert ip_rule.confidence == "HIGH"
+
+    def test_heuristic_evidence_on_suspicious_patterns(self):
+        from backend.app.models import EvidenceSource, EvidenceType
+
+        result = analyze_url("https://paypal-security-check.xyz/update")
+        brand_rule = next(r for r in result.triggered_rules if r.rule_id == "RULE_BRAND_IMPERSONATION")
+        assert brand_rule.evidence_type == EvidenceType.HEURISTIC
+        assert brand_rule.source == EvidenceSource.LOCAL_HEURISTIC
+        assert brand_rule.confidence == "HIGH"
+
+    def test_inconclusive_evidence_on_long_url(self):
+        from backend.app.models import EvidenceSource, EvidenceType
+
+        long_url = "https://unfamiliar-news-portal.org/article/" + ("a" * 150)
+        result = analyze_url(long_url)
+        length_rule = next(r for r in result.triggered_rules if r.rule_id in ("RULE_LONG_URL", "RULE_EXTREME_URL_LENGTH"))
+        assert length_rule.evidence_type == EvidenceType.INCONCLUSIVE
+        assert length_rule.source == EvidenceSource.LOCAL_HEURISTIC
+        assert length_rule.confidence == "LOW"
+

@@ -192,6 +192,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "HIGH",
       penalty: 30,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
     httpAnalysis = {
       scheme: "http",
@@ -218,6 +221,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "MEDIUM",
       penalty: 25,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
     httpAnalysis = {
       scheme,
@@ -239,6 +245,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "CRITICAL",
       penalty: 45,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
   } else if (hostname) {
     safeIndicators.push("Standard domain name addressing (no raw IP host).");
@@ -257,6 +266,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "CRITICAL",
       penalty: 70,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
   }
 
@@ -274,6 +286,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: isLocal ? "LOW" : "MEDIUM",
       penalty,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
   } else {
     safeIndicators.push("Standard web communication ports used (80/443).");
@@ -291,6 +306,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "CRITICAL",
       penalty: 45,
+      evidence_type: "confirmed",
+      source: "local_heuristic",
+      confidence: "HIGH",
     });
   }
 
@@ -319,6 +337,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "MEDIUM",
       penalty: 25,
+      evidence_type: "heuristic",
+      source: "reputation_list",
+      confidence: "MEDIUM",
     });
   }
 
@@ -345,6 +366,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
         description: msg,
         severity: "CRITICAL",
         penalty: 50,
+        evidence_type: "heuristic",
+        source: "local_heuristic",
+        confidence: "HIGH",
       });
     }
   }
@@ -361,6 +385,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "MEDIUM",
       penalty: 25,
+      evidence_type: "heuristic",
+      source: "local_heuristic",
+      confidence: "MEDIUM",
     });
   }
 
@@ -383,6 +410,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "MEDIUM",
       penalty: 20,
+      evidence_type: "heuristic",
+      source: "local_heuristic",
+      confidence: "MEDIUM",
     });
   }
 
@@ -410,6 +440,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
         description: msg,
         severity: "MEDIUM",
         penalty: 20,
+        evidence_type: "heuristic",
+        source: "local_heuristic",
+        confidence: "MEDIUM",
       });
     }
   }
@@ -426,6 +459,9 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: msg,
       severity: "LOW",
       penalty: 20,
+      evidence_type: "inconclusive",
+      source: "local_heuristic",
+      confidence: "LOW",
     });
   } else if (url.length > 120) {
     totalPenalty += 10;
@@ -436,8 +472,12 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
       description: "URL is longer than typical addresses, warranting closer inspection.",
       severity: "LOW",
       penalty: 10,
+      evidence_type: "inconclusive",
+      source: "local_heuristic",
+      confidence: "LOW",
     });
   }
+
 
   // Discount score for recognized trusted domains
   if (isTrustedDomain && !triggeredRules.some((r) => r.severity === "CRITICAL")) {
@@ -493,6 +533,10 @@ export function evaluateUrlLocally(rawUrl: string, blockThreshold = 90, warnThre
     summary =
       "UNVERIFIED DOMAIN (NO DETECTED THREATS): No known phishing signatures were matched, but this domain is not on your verified list. Lack of detected evidence is not proof of safety.";
   }
+
+  triggeredRules.forEach((r) => {
+    if (!r.id) r.id = r.rule_id;
+  });
 
   return {
     url,

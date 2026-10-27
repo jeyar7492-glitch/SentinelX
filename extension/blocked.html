@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
   <title>SentinelX — Security Protection</title>
   <link rel="stylesheet" href="blocked.css">
 </head>
@@ -11,101 +12,148 @@
     <!-- Header -->
     <header class="blocked-header">
       <div class="brand">
-        <img src="icons/icon-48.png" alt="SentinelX" class="brand-logo" width="32" height="32">
+        <div class="brand-shield-wrapper">
+          <img src="icons/icon-48.png" alt="SentinelX Shield" class="brand-logo" width="30" height="30">
+        </div>
         <div class="brand-text">
-          <h1 class="brand-title">SentinelX</h1>
-          <span class="brand-subtitle">Pre-Navigation Protection Engine</span>
+          <div class="brand-title-row">
+            <h1 class="brand-title">SentinelX</h1>
+            <span class="brand-tag">SECURITY ENGINE</span>
+          </div>
+          <span class="brand-subtitle">Pre-Navigation Threat Interceptor</span>
         </div>
       </div>
-      <div id="protection-status-badge" class="protection-badge">
-        <span class="shield-icon">🛡️</span>
-        <span id="protection-status-text">Local Enforcement Active</span>
+
+      <div class="header-right">
+        <button id="theme-toggle-btn" class="theme-toggle-btn" title="Toggle color theme" aria-label="Toggle color theme">
+          <span id="theme-toggle-icon">🌙</span>
+        </button>
+        <div id="protection-status-badge" class="protection-badge">
+          <span class="status-dot"></span>
+          <span id="protection-status-text">Shield Enforcing</span>
+        </div>
       </div>
     </header>
 
-    <!-- Main Alert Card -->
+    <!-- Main Alert Card with Glassmorphism -->
     <main id="alert-card" class="alert-card mode-block">
+      <!-- Hazard Badge / Icon -->
       <div class="hazard-icon-wrapper">
         <div id="hazard-icon" class="hazard-circle">⛔</div>
       </div>
 
-      <h2 id="alert-heading" class="alert-heading">Website Blocked for Your Protection</h2>
-      <p id="alert-subheading" class="alert-subheading">
-        SentinelX aborted this connection before any data was sent or received. The target matches high-confidence threat indicators or local security policies.
-      </p>
+      <!-- Headings -->
+      <div class="heading-group">
+        <div class="verdict-pill-row">
+          <span id="interstitial-badge" class="interstitial-badge critical">BLOCKED NAVIGATION</span>
+          <span id="risk-score-pill" class="risk-score-pill">SCORE: 95/100</span>
+        </div>
+        <h2 id="alert-heading" class="alert-heading">Website Blocked for Your Protection</h2>
+        <p id="alert-subheading" class="alert-subheading">
+          SentinelX aborted this connection before any data was sent or received. The target matches high-confidence threat signatures or security policies.
+        </p>
+      </div>
 
-      <!-- Target details -->
-      <section class="details-box">
-        <div class="detail-row">
-          <span class="detail-label">Target Host:</span>
-          <span id="target-domain" class="detail-value host-highlight">Loading...</span>
+      <!-- Target Domain & URL Information Box -->
+      <section class="target-card" aria-label="Destination Information">
+        <div class="target-row">
+          <span class="target-label">DESTINATION DOMAIN:</span>
+          <span id="target-domain" class="target-domain-val">Loading...</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">Requested URL:</span>
-          <span id="target-url" class="detail-value url-highlight">Loading...</span>
+        <div class="target-row">
+          <span class="target-label">REQUESTED URL:</span>
+          <span id="target-url" class="target-url-val">Loading...</span>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">Matched Policy:</span>
-          <span id="matched-rule" class="detail-value">Evaluating policy...</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Risk Assessment:</span>
-          <span id="rule-severity" class="severity-tag critical">CRITICAL RISK (90+)</span>
-        </div>
-        <div class="detail-row reason-row">
-          <span class="detail-label">Threat Explanation:</span>
-          <p id="threat-reason" class="reason-text">Analyzing blocked parameters...</p>
+        <div class="target-row">
+          <span class="target-label">SECURITY POLICY:</span>
+          <span id="matched-rule" class="target-policy-val">Evaluating policy...</span>
         </div>
       </section>
 
-      <!-- Safe Navigation Actions -->
-      <div class="action-buttons">
-        <button id="btn-back-safety" class="btn btn-primary">
+      <!-- Unknown Publisher Breakdown (Visible only for unknown_publisher mode) -->
+      <section id="unknown-publisher-card" class="unverified-card" style="display: none;">
+        <div class="unverified-header">
+          <span class="unverified-icon">ℹ️</span>
+          <strong>Publisher Identity Assessment</strong>
+        </div>
+        <p class="unverified-intro">
+          This website is unverified, not automatically malicious. The browser cannot reliably verify the entity behind this domain against known local trust directories:
+        </p>
+        <ul class="unverified-checklist">
+          <li>
+            <span class="checklist-bullet">✗</span>
+            <div>
+              <strong>Publisher Identity:</strong>
+              <span>Publisher identity unavailable. Domain is not registered in your verified directory.</span>
+            </div>
+          </li>
+          <li>
+            <span class="checklist-bullet">✗</span>
+            <div>
+              <strong>Reputation Evidence:</strong>
+              <span>Insufficient local history to confirm safety or benign operational status.</span>
+            </div>
+          </li>
+          <li>
+            <span class="checklist-bullet">✓</span>
+            <div>
+              <strong>Observed Heuristics:</strong>
+              <span>No confirmed phishing signatures detected, but caution is strictly advised.</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Structured Threat Signals List (For block & warning modes) -->
+      <section id="signals-section" class="signals-section" aria-label="Detected Signals">
+        <div class="signals-header">
+          <span class="signals-title">Security Evidence & Observed Signals</span>
+          <span id="signal-count-badge" class="signal-count-badge">0 Signals</span>
+        </div>
+        <div id="signals-list" class="signals-list">
+          <!-- Populated dynamically with evidence classification -->
+        </div>
+      </section>
+
+      <!-- Safety Countdown Bar -->
+      <div id="countdown-bar" class="countdown-bar" style="display: none;">
+        <div class="countdown-spinner" id="countdown-spinner"></div>
+        <span id="countdown-text" class="countdown-text">Safety delay active: 3s</span>
+      </div>
+
+      <!-- Action Navigation Buttons -->
+      <div class="action-buttons-group">
+        <button id="btn-back-safety" class="btn btn-safety">
           🛡️ Return to Safety
         </button>
-        <button id="btn-proceed-warning" class="btn btn-warning" style="display: none;">
-          ⚠️ Proceed to Website (I Understand the Risks)
+
+        <button id="btn-proceed-warning" class="btn btn-warning-action" style="display: none;" disabled>
+          Continue to Website
         </button>
-        <button id="btn-close-tab" class="btn btn-secondary">
+
+        <button id="btn-close-tab" class="btn btn-subtle">
           Close Tab
         </button>
       </div>
 
-      <!-- Controlled False Positive / Override Accordion -->
-      <section id="override-section" class="override-section">
-        <button id="btn-toggle-override" class="override-toggle">
-          <span id="override-toggle-text">False positive or unexpected block?</span>
-          <span id="override-arrow">▼</span>
-        </button>
-
-        <div id="override-content" class="override-panel" style="display: none;">
-          <p class="override-warning">
-            <strong>Security Notice:</strong> Threat actors routinely spoof banking portals, cloud services, and email providers.
-            Unblocking will connect directly to the destination server. Never submit passwords or personal information on unverified sites.
-          </p>
-
-          <label class="override-checkbox-label">
-            <input type="checkbox" id="chk-acknowledge">
-            <span>I acknowledge the security risks and confirm I wish to unblock this domain.</span>
-          </label>
-
-          <div class="override-action-bar">
-            <button id="btn-unblock-proceed" class="btn btn-warning" disabled>
-              Allow Domain & Proceed
-            </button>
-            <button id="btn-open-settings" class="btn btn-outline">
-              Review in Settings
-            </button>
-          </div>
+      <!-- Policy Review & False Positive Section -->
+      <section id="policy-review-section" class="policy-review-section">
+        <p class="policy-note">
+          <strong>Security Policy Notice:</strong> SentinelX enforces strict pre-navigation protection to shield your credentials from deceptive brand impersonation and malicious servers.
+        </p>
+        <div class="policy-links">
+          <button id="btn-open-settings" class="btn-link">
+            ⚙️ Review Security Policies in Settings
+          </button>
         </div>
       </section>
     </main>
 
     <!-- Footer -->
     <footer class="blocked-footer">
-      <span>Zero External Telemetry</span>
+      <span>Local-First Shield</span>
       <span>•</span>
-      <span>Local Rule Enforcement</span>
+      <span>Zero Cloud Telemetry</span>
       <span>•</span>
       <span>Strict 127.0.0.1 Core</span>
     </footer>

@@ -11,10 +11,12 @@ export interface ProtectionSettings {
   mode: ProtectionMode;
   blockHighConfidence: boolean;
   warnSuspicious: boolean;
+  warnUnknownPublisher: boolean;
   blockThreshold: number; // default 90 (BLOCK)
   warnThreshold: number;  // default 80 (WARN_INTERSTITIAL)
   allowlist: string[];
   customBlocklist: string[];
+  theme?: "dark" | "light" | "system";
 }
 
 export interface ThreatRule {

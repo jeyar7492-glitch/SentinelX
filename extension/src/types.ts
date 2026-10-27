@@ -11,6 +11,10 @@ export type RiskClassification = "SAFE" | "SUSPICIOUS" | "HIGH RISK";
 
 export type RuleSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
+export type EvidenceType = "confirmed" | "heuristic" | "inconclusive";
+
+export type EvidenceSource = "local_heuristic" | "reputation_list" | "verified_signature";
+
 export interface HttpAnalysis {
   scheme: string;
   is_encrypted: boolean;
@@ -19,12 +23,16 @@ export interface HttpAnalysis {
 }
 
 export interface TriggeredRule {
+  id?: string;
   rule_id: string;
   category: string;
   name: string;
   description: string;
   severity: RuleSeverity;
   penalty: number;
+  evidence_type?: EvidenceType;
+  source?: EvidenceSource;
+  confidence?: string;
 }
 
 export interface RiskPolicyConfig {
@@ -72,4 +80,6 @@ export interface ScanHistoryItem {
   recommended_action: RecommendedAction;
   timestamp: string;
   detection_reasons: string[];
+  eventType?: "scan" | "block" | "blocked" | "warning" | "unknown_publisher";
+  ruleName?: string;
 }

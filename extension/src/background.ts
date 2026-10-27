@@ -23,10 +23,12 @@ export const DEFAULT_SETTINGS: ProtectionSettings = {
   mode: "STANDARD",
   blockHighConfidence: true,
   warnSuspicious: true,
+  warnUnknownPublisher: false,
   blockThreshold: 90,
   warnThreshold: 80,
   allowlist: [],
   customBlocklist: [],
+  theme: "dark",
 };
 
 // In-memory / session tracking for blocked navigation events
@@ -36,10 +38,53 @@ export interface BlockedEvent {
   ruleName: string;
   ruleId: number;
   reason: string;
-  type: "block" | "warning";
+  type: "block" | "warning" | "unknown_publisher";
   riskScore: number;
   timestamp: string;
 }
+
+// Bounded in-memory evaluation cache (max 100 entries, 60s TTL)
+interface CacheEntry {
+  eval: ReturnType<typeof evaluateUrlLocally>;
+  expiresAt: number;
+}
+const evaluationCache = new Map<string, CacheEntry>();
+
+export function getCachedEvaluation(url: string, blockThreshold = 90, warnThreshold = 80): ReturnType<typeof evaluateUrlLocally> {
+  const now = Date.now();
+  const cached = evaluationCache.get(url);
+  if (cached && cached.expiresAt > now) {
+    return cached.eval;
+  }
+  const result = evaluateUrlLocally(url, blockThreshold, warnThreshold);
+  if (evaluationCache.size >= 100) {
+    const oldestKey = evaluationCache.keys().next().value;
+    if (oldestKey) evaluationCache.delete(oldestKey);
+  }
+  evaluationCache.set(url, { eval: result, expiresAt: now + 60000 });
+  return result;
+}
+
+export function setCachedEvaluation(url: string, result: ReturnType<typeof evaluateUrlLocally>, ttlMs = 60000): void {
+  const now = Date.now();
+  if (evaluationCache.size >= 100) {
+    const oldestKey = evaluationCache.keys().next().value;
+    if (oldestKey) evaluationCache.delete(oldestKey);
+  }
+  evaluationCache.set(url, { eval: result, expiresAt: now + ttlMs });
+}
+
+export function hasCachedEvaluation(url: string): boolean {
+  const cached = evaluationCache.get(url);
+  return Boolean(cached && cached.expiresAt > Date.now());
+}
+
+export function clearEvaluationCache(): void {
+  evaluationCache.clear();
+}
+
+// Track redirect chains per tab (tabId -> list of redirected URLs)
+const tabRedirectChains = new Map<number, string[]>();
 
 /**
  * Normalizes a URL for precise single-navigation matching.
@@ -176,6 +221,7 @@ export function clearTabState(tabId: number): void {
       inFlightNavigationRedirects.delete(key);
     }
   }
+  tabRedirectChains.delete(tabId);
 }
 
 export function clearInFlightRedirect(tabId: number): void {
@@ -189,6 +235,8 @@ export function clearInFlightRedirect(tabId: number): void {
 export function clearAllBypasses(): void {
   oneTimeNavigationBypasses.clear();
   inFlightNavigationRedirects.clear();
+  tabRedirectChains.clear();
+  clearEvaluationCache();
 }
 
 /**
@@ -208,6 +256,7 @@ export async function getSettings(): Promise<ProtectionSettings> {
  */
 export async function saveSettings(settings: ProtectionSettings): Promise<void> {
   await chrome.storage.local.set({ sentinel_settings: settings });
+  clearEvaluationCache();
   await syncDnrRules();
 }
 
@@ -419,8 +468,8 @@ if (typeof chrome !== "undefined" && chrome.webNavigation?.onBeforeNavigate) {
       return;
     }
 
-    // 2. Real-time in-extension heuristic evaluation of live web browsing!
-    const evaluation = evaluateUrlLocally(details.url, settings.blockThreshold, settings.warnThreshold);
+    // 2. Real-time in-extension heuristic evaluation of live web browsing (with bounded caching)!
+    const evaluation = getCachedEvaluation(details.url, settings.blockThreshold, settings.warnThreshold);
 
     if (evaluation.verdict === "dangerous" || evaluation.risk_score >= settings.blockThreshold) {
       inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
@@ -466,6 +515,8 @@ if (typeof chrome !== "undefined" && chrome.webNavigation?.onBeforeNavigate) {
         recommended_action: "BLOCK",
         timestamp: new Date().toISOString(),
         detection_reasons: evaluation.detection_reasons || [],
+        eventType: "block",
+        ruleName: event.ruleName,
       });
 
       const blockedUrl = chrome.runtime.getURL(
@@ -502,6 +553,8 @@ if (typeof chrome !== "undefined" && chrome.webNavigation?.onBeforeNavigate) {
           recommended_action: "WARN_INTERSTITIAL",
           timestamp: new Date().toISOString(),
           detection_reasons: evaluation.detection_reasons || [],
+          eventType: "warning",
+          ruleName: warningEvent.ruleName,
         });
 
         const warningUrl = chrome.runtime.getURL(
@@ -510,6 +563,45 @@ if (typeof chrome !== "undefined" && chrome.webNavigation?.onBeforeNavigate) {
         chrome.tabs.update(details.tabId, { url: warningUrl });
         return;
       }
+    }
+
+    // 3. Unknown Publisher Warning:
+    // When enabled in settings, intercept unverified domains where publisher identity is unavailable
+    if (settings.warnUnknownPublisher && evaluation.verdict === "unknown") {
+      inFlightNavigationRedirects.set(inFlightKey, Date.now() + 1500);
+      const unknownEvent: BlockedEvent = {
+        url: details.url,
+        domain,
+        ruleName: "Publisher Identity Unavailable",
+        ruleId: 77777,
+        reason: "The publisher or website identity cannot be verified against local directories. This website is unverified, not automatically malicious.",
+        type: "unknown_publisher",
+        riskScore: evaluation.risk_score,
+        timestamp: new Date().toISOString(),
+      };
+      await chrome.storage.session.set({
+        [`blocked_${details.tabId}`]: unknownEvent,
+        lastBlockedEvent: unknownEvent,
+      });
+
+      await addScanHistory({
+        id: String(Date.now()),
+        url: details.url,
+        domain,
+        risk_score: evaluation.risk_score,
+        verdict: "unknown",
+        recommended_action: "UNABLE_TO_VERIFY",
+        timestamp: new Date().toISOString(),
+        detection_reasons: ["Publisher identity unavailable: domain is not cataloged in local verified directory."],
+        eventType: "unknown_publisher",
+        ruleName: "Publisher Identity Unavailable",
+      });
+
+      const unknownUrl = chrome.runtime.getURL(
+        `/blocked.html?type=unknown_publisher&domain=${encodeURIComponent(domain)}&score=${evaluation.risk_score}&url=${encodeURIComponent(details.url)}&rule=${encodeURIComponent(unknownEvent.ruleName)}&reason=${encodeURIComponent(unknownEvent.reason)}`
+      );
+      chrome.tabs.update(details.tabId, { url: unknownUrl });
+      return;
     }
   } catch {
     // Non-fatal navigation tracking error
@@ -706,10 +798,16 @@ if (typeof chrome !== "undefined") {
     clearTabState(tabId);
   });
 
-  // Clear in-flight navigation markers once a main-frame navigation commits
+  // Clear in-flight navigation markers and track redirect chains once a main-frame navigation commits
   chrome.webNavigation?.onCommitted?.addListener((details) => {
     if (details.frameId === 0) {
       clearInFlightRedirect(details.tabId);
+      if (details.transitionQualifiers && (details.transitionQualifiers.includes("server_redirect") || details.transitionQualifiers.includes("client_redirect"))) {
+        const chain = tabRedirectChains.get(details.tabId) || [];
+        chain.push(details.url);
+        if (chain.length > 10) chain.shift();
+        tabRedirectChains.set(details.tabId, chain);
+      }
     }
   });
 }

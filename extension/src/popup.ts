@@ -1,7 +1,8 @@
 /**
  * SentinelX Chrome Extension - Popup Controller (v2.0)
- * Manages active tab scanning, local FastAPI core communication,
- * scan history, central risk policy thresholds, and dynamic DNR rules.
+ * Glassmorphism Dashboard: Manages active tab scanning, local FastAPI core communication,
+ * scan history with filter tabs, central risk policy thresholds, dynamic DNR rules,
+ * light/dark theme switching, and 3-state protection status.
  */
 
 import { AnalyzeResponse, HealthResponse, ScanHistoryItem } from "./types.js";
@@ -21,10 +22,13 @@ const viewHistory = document.getElementById("view-history") as HTMLElement;
 const viewSettings = document.getElementById("view-settings") as HTMLElement;
 
 // Header & Global Status Elements
+const themeToggleBtn = document.getElementById("theme-toggle-btn") as HTMLButtonElement;
+const btnOpenDashboard = document.getElementById("btn-open-dashboard") as HTMLButtonElement;
 const backendStatusEl = document.getElementById("backend-status") as HTMLElement;
 const backendStatusTextEl = document.getElementById("backend-status-text") as HTMLElement;
 const globalProtectionBanner = document.getElementById("global-protection-banner") as HTMLElement;
 const protectionStatusLabel = document.getElementById("protection-status-label") as HTMLElement;
+const protectionStatusSub = document.getElementById("protection-status-sub") as HTMLElement;
 const modeBadgePill = document.getElementById("mode-badge-pill") as HTMLElement;
 
 // Scanner View Elements
@@ -60,12 +64,15 @@ const safeIndicatorsContainerEl = document.getElementById("safe-indicators-conta
 // History View Elements
 const historyItemsContainer = document.getElementById("history-items-container") as HTMLElement;
 const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButtonElement;
+const historyFilterTabs = document.querySelectorAll(".history-filter-tab");
 
 // Settings View Elements
 const dnrStatusPill = document.getElementById("dnr-status-pill") as HTMLElement;
 const modeStandardRadio = document.getElementById("mode-standard") as HTMLInputElement;
 const modeStrictRadio = document.getElementById("mode-strict") as HTMLInputElement;
 const modeDisabledRadio = document.getElementById("mode-disabled") as HTMLInputElement;
+const toggleUnknownPublisher = document.getElementById("toggle-unknown-publisher") as HTMLInputElement;
+const selectTheme = document.getElementById("select-theme") as HTMLSelectElement;
 const inputBlockThreshold = document.getElementById("input-block-threshold") as HTMLInputElement;
 const inputWarnThreshold = document.getElementById("input-warn-threshold") as HTMLInputElement;
 const btnSaveThresholds = document.getElementById("btn-save-thresholds") as HTMLButtonElement;
@@ -81,6 +88,106 @@ const btnPingBackend = document.getElementById("btn-ping-backend") as HTMLButton
 const healthBackendVal = document.getElementById("health-backend-val") as HTMLElement;
 
 let lastScannedUrl = "";
+let currentHistoryFilter: "all" | "blocked" | "warnings" = "all";
+let cachedHistoryItems: ScanHistoryItem[] = [];
+let currentSettings: ProtectionSettings | null = null;
+let isBackendOnline = false;
+
+/* =========================================================================
+   THEME MANAGEMENT
+   ========================================================================= */
+
+function applyTheme(theme: "dark" | "light" | "system"): void {
+  let effectiveTheme = theme;
+  if (theme === "system") {
+    effectiveTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+
+  document.documentElement.setAttribute("data-theme", effectiveTheme);
+  if (themeToggleBtn) {
+    themeToggleBtn.querySelector(".theme-icon")!.textContent = effectiveTheme === "light" ? "☀️" : "🌙";
+  }
+  if (selectTheme) {
+    selectTheme.value = theme;
+  }
+}
+
+async function initTheme(): Promise<void> {
+  chrome.storage.local.get(["sentinelx_theme"], (res) => {
+    const savedTheme = (res.sentinelx_theme as "dark" | "light" | "system") || "dark";
+    applyTheme(savedTheme);
+  });
+}
+
+function toggleTheme(): void {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  const newTheme = current === "dark" ? "light" : "dark";
+  applyTheme(newTheme);
+  chrome.storage.local.set({ sentinelx_theme: newTheme });
+  chrome.runtime.sendMessage({
+    action: "UPDATE_SETTINGS",
+    settings: { theme: newTheme },
+  });
+}
+
+themeToggleBtn?.addEventListener("click", toggleTheme);
+
+selectTheme?.addEventListener("change", () => {
+  const selected = selectTheme.value as "dark" | "light" | "system";
+  applyTheme(selected);
+  chrome.storage.local.set({ sentinelx_theme: selected });
+  chrome.runtime.sendMessage({
+    action: "UPDATE_SETTINGS",
+    settings: { theme: selected },
+  });
+});
+
+// Dashboard in Full Tab
+btnOpenDashboard?.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("popup.html") });
+});
+
+/* =========================================================================
+   3-STATE PROTECTION BANNER & BACKEND HEALTH
+   ========================================================================= */
+
+function updateProtectionStatusBanner(): void {
+  if (!globalProtectionBanner) return;
+
+  const protectionDisabled =
+    !currentSettings?.protectionEnabled || currentSettings?.mode === "DISABLED";
+
+  if (protectionDisabled) {
+    // State 3: Protection Unavailable
+    globalProtectionBanner.className = "protection-banner disabled";
+    protectionStatusLabel.textContent = "Protection Unavailable";
+    if (protectionStatusSub) {
+      protectionStatusSub.textContent = "Protection is disabled in settings — browser is unprotected";
+    }
+    modeBadgePill.textContent = "DISABLED";
+    return;
+  }
+
+  if (!isBackendOnline) {
+    // State 2: Limited Protection
+    globalProtectionBanner.className = "protection-banner degraded";
+    protectionStatusLabel.textContent = "Limited Protection";
+    if (protectionStatusSub) {
+      protectionStatusSub.textContent = "Backend offline — protected by in-browser heuristics and DNR rules";
+    }
+    modeBadgePill.textContent = "LIMITED (LOCAL)";
+    return;
+  }
+
+  // State 1: Protected
+  globalProtectionBanner.className = "protection-banner active";
+  protectionStatusLabel.textContent = "Protected";
+  if (protectionStatusSub) {
+    protectionStatusSub.textContent = "Real-time pre-navigation DNR & local engine active";
+  }
+  modeBadgePill.textContent =
+    currentSettings?.mode === "STRICT_ALLOWLIST" ? "STRICT ALLOWLIST" : "STANDARD DNR";
+}
 
 /**
  * Check if local FastAPI backend is responsive on 127.0.0.1:8000
@@ -100,41 +207,52 @@ async function checkBackendHealth(): Promise<boolean> {
 
     if (response.ok) {
       const data: HealthResponse = await response.json();
+      isBackendOnline = true;
       backendStatusEl.className = "status-indicator online";
       backendStatusTextEl.textContent = `Online (${data.host_restriction})`;
       healthBackendVal.textContent = "127.0.0.1:8000 (Active)";
       healthBackendVal.className = "health-v highlight-green";
+      updateProtectionStatusBanner();
       return true;
     }
   } catch {
     // Unreachable
   }
 
+  isBackendOnline = false;
   backendStatusEl.className = "status-indicator degraded";
   backendStatusTextEl.textContent = "Offline (Local Engine Active)";
   healthBackendVal.textContent = "127.0.0.1:8000 (Offline)";
   healthBackendVal.className = "health-v";
+  updateProtectionStatusBanner();
   return false;
 }
 
-/**
- * Tab Navigation Controller
- */
+/* =========================================================================
+   NAVIGATION CONTROLLER
+   ========================================================================= */
+
 function switchView(target: "scan" | "history" | "settings"): void {
-  [navScanBtn, navHistoryBtn, navSettingsBtn].forEach((b) => b.classList.remove("active"));
+  [navScanBtn, navHistoryBtn, navSettingsBtn].forEach((b) => {
+    b.classList.remove("active");
+    b.setAttribute("aria-selected", "false");
+  });
   viewScanner.style.display = "none";
   viewHistory.style.display = "none";
   viewSettings.style.display = "none";
 
   if (target === "scan") {
     navScanBtn.classList.add("active");
+    navScanBtn.setAttribute("aria-selected", "true");
     viewScanner.style.display = "flex";
   } else if (target === "history") {
     navHistoryBtn.classList.add("active");
+    navHistoryBtn.setAttribute("aria-selected", "true");
     viewHistory.style.display = "flex";
     loadHistoryView();
   } else {
     navSettingsBtn.classList.add("active");
+    navSettingsBtn.setAttribute("aria-selected", "true");
     viewSettings.style.display = "flex";
     loadSettingsView();
   }
@@ -144,9 +262,10 @@ navScanBtn.addEventListener("click", () => switchView("scan"));
 navHistoryBtn.addEventListener("click", () => switchView("history"));
 navSettingsBtn.addEventListener("click", () => switchView("settings"));
 
-/**
- * Perform analysis of a URL via the local backend
- */
+/* =========================================================================
+   URL SCANNER & ANALYSIS CONTROLLER
+   ========================================================================= */
+
 async function analyzeUrl(targetUrl: string): Promise<void> {
   if (!isValidWebUrl(targetUrl)) {
     showError(
@@ -164,10 +283,6 @@ async function analyzeUrl(targetUrl: string): Promise<void> {
   if (!isHealthy) {
     // Graceful degraded mode: Evaluate via in-extension local heuristic engine!
     try {
-      globalProtectionBanner.className = "protection-banner degraded";
-      protectionStatusLabel.textContent = "Degraded Mode (Local In-Browser Heuristics Active)";
-      modeBadgePill.textContent = "DEGRADED (LOCAL)";
-
       const localData = evaluateUrlLocally(targetUrl);
       lastScannedUrl = targetUrl;
       renderResults(localData, true);
@@ -182,6 +297,7 @@ async function analyzeUrl(targetUrl: string): Promise<void> {
         recommended_action: localData.recommended_action || "PROCEED_WITH_CAUTION",
         timestamp: new Date().toISOString(),
         detection_reasons: localData.detection_reasons || [],
+        eventType: localData.risk_score >= 90 ? "blocked" : localData.risk_score >= 80 ? "warning" : "scan",
       };
       chrome.runtime.sendMessage({ action: "SAVE_SCAN_RESULT", item: historyItem });
 
@@ -232,10 +348,19 @@ async function analyzeUrl(targetUrl: string): Promise<void> {
       url: data.url,
       domain: data.hostname || normalizeDomain(data.url),
       risk_score: data.risk_score,
-      verdict: data.verdict || (data.risk_score >= 80 ? "dangerous" : data.risk_score >= 30 ? "suspicious" : "safe"),
-      recommended_action: data.recommended_action || (data.risk_score >= 90 ? "BLOCK" : data.risk_score >= 80 ? "WARN_INTERSTITIAL" : "ALLOW"),
+      verdict:
+        data.verdict ||
+        (data.risk_score >= 80 ? "dangerous" : data.risk_score >= 30 ? "suspicious" : "safe"),
+      recommended_action:
+        data.recommended_action ||
+        (data.risk_score >= 90
+          ? "BLOCK"
+          : data.risk_score >= 80
+          ? "WARN_INTERSTITIAL"
+          : "ALLOW"),
       timestamp: new Date().toISOString(),
       detection_reasons: data.detection_reasons || [],
+      eventType: data.risk_score >= 90 ? "blocked" : data.risk_score >= 80 ? "warning" : "scan",
     };
     chrome.runtime.sendMessage({ action: "SAVE_SCAN_RESULT", item: historyItem });
 
@@ -250,11 +375,8 @@ async function analyzeUrl(targetUrl: string): Promise<void> {
       });
     }
   } catch (err: unknown) {
-    // If backend fetch failed unexpectedly during request, fallback to local analyzer!
     console.warn("[SentinelX] Backend request failed, falling back to local analyzer:", err);
     try {
-      globalProtectionBanner.className = "protection-banner degraded";
-      protectionStatusLabel.textContent = "Degraded Mode (Fallback to In-Browser Engine)";
       const fallbackData = evaluateUrlLocally(targetUrl);
       lastScannedUrl = targetUrl;
       renderResults(fallbackData, true);
@@ -268,7 +390,7 @@ async function analyzeUrl(targetUrl: string): Promise<void> {
 }
 
 /**
- * Render structured analysis results to the popup UI
+ * Render structured analysis results to the popup UI with evidence breakdown
  */
 function renderResults(data: AnalyzeResponse, isDegraded = false): void {
   resultsContainerEl.style.display = "flex";
@@ -283,8 +405,22 @@ function renderResults(data: AnalyzeResponse, isDegraded = false): void {
   riskScoreBarEl.style.width = `${Math.min(Math.max(data.risk_score, 5), 100)}%`;
 
   // Determine Verdict & Action classes
-  let verdict = data.verdict || (data.risk_score >= 90 ? "dangerous" : data.risk_score >= 80 ? "suspicious" : data.risk_score < 30 ? "safe" : "unknown");
-  let action = data.recommended_action || (data.risk_score >= 90 ? "BLOCK" : data.risk_score >= 80 ? "WARN_INTERSTITIAL" : "ALLOW");
+  let verdict =
+    data.verdict ||
+    (data.risk_score >= 90
+      ? "dangerous"
+      : data.risk_score >= 80
+      ? "suspicious"
+      : data.risk_score < 30
+      ? "safe"
+      : "unknown");
+  let action =
+    data.recommended_action ||
+    (data.risk_score >= 90
+      ? "BLOCK"
+      : data.risk_score >= 80
+      ? "WARN_INTERSTITIAL"
+      : "ALLOW");
 
   // In degraded mode: NEVER label unverified sites as safe!
   if (isDegraded && verdict === "safe" && data.risk_score < 30) {
@@ -328,10 +464,12 @@ function renderResults(data: AnalyzeResponse, isDegraded = false): void {
     quickBlockBar.style.display = "none";
   }
 
-  resultSummaryEl.textContent = isDegraded ? `[DEGRADED MODE - OFFLINE] ${data.summary}` : data.summary;
+  resultSummaryEl.textContent = isDegraded
+    ? `[LIMITED LOCAL MODE] ${data.summary}`
+    : data.summary;
   confidenceTextEl.textContent = isDegraded
-    ? "DEGRADED (Backend Offline - In-Browser Local Heuristics)"
-    : (data.confidence || "Transparent Local Heuristics");
+    ? "LOCAL IN-BROWSER HEURISTICS (Backend Offline)"
+    : (data.confidence || "Deterministic Local Heuristics");
 
   // Flag Count Pill
   const ruleCount = data.triggered_rules ? data.triggered_rules.length : 0;
@@ -349,7 +487,7 @@ function renderResults(data: AnalyzeResponse, isDegraded = false): void {
   httpSummaryEl.textContent = data.http_analysis.summary;
   httpExplanationEl.textContent = data.http_analysis.detailed_explanation;
 
-  // Triggered Rules list
+  // Triggered Rules list with Structured Evidence Tags
   rulesContainerEl.innerHTML = "";
   if (ruleCount === 0) {
     rulesContainerEl.innerHTML = `
@@ -362,14 +500,32 @@ function renderResults(data: AnalyzeResponse, isDegraded = false): void {
     data.triggered_rules.forEach((rule) => {
       const item = document.createElement("div");
       item.className = `rule-item severity-${rule.severity.toLowerCase()}`;
+
+      // Evidence Type Tag formatting
+      const evidenceType = rule.evidence_type || "heuristic";
+      const evidenceTagClass =
+        evidenceType === "confirmed"
+          ? "tag-evidence-confirmed"
+          : evidenceType === "inconclusive"
+          ? "tag-evidence-inconclusive"
+          : "tag-evidence-heuristic";
+
+      const sourceLabel =
+        rule.source === "verified_signature"
+          ? "Verified Signature"
+          : rule.source === "reputation_list"
+          ? "Reputation Source"
+          : "Local Heuristic";
+
       item.innerHTML = `
         <div class="rule-header">
           <span class="rule-name">${escapeHtml(rule.name)}</span>
           <span class="rule-penalty">+${rule.penalty}</span>
         </div>
-        <div class="rule-meta">
-          <span class="rule-category">${escapeHtml(rule.category)}</span>
-          <span class="rule-severity-tag ${rule.severity.toLowerCase()}">${rule.severity}</span>
+        <div class="rule-tags-row">
+          <span class="rule-tag ${evidenceTagClass}">${escapeHtml(evidenceType)}</span>
+          <span class="rule-tag tag-source">${escapeHtml(sourceLabel)}</span>
+          <span class="rule-tag tag-severity ${rule.severity.toLowerCase()}">${escapeHtml(rule.severity)}</span>
         </div>
         <div class="rule-desc">${escapeHtml(rule.description)}</div>
       `;
@@ -474,25 +630,51 @@ urlInputEl.addEventListener("keydown", (e: KeyboardEvent) => {
 });
 
 /* =========================================================================
-   HISTORY CONTROLLER
+   HISTORY CONTROLLER & FILTER TABS
    ========================================================================= */
 
 function loadHistoryView(): void {
   chrome.runtime.sendMessage({ action: "GET_SCAN_HISTORY" }, (res) => {
     if (res && res.success) {
-      const history: ScanHistoryItem[] = res.history || [];
-      renderHistoryItems(history);
+      cachedHistoryItems = res.history || [];
+      renderFilteredHistory();
     }
   });
+}
+
+function renderFilteredHistory(): void {
+  let filtered = cachedHistoryItems;
+  if (currentHistoryFilter === "blocked") {
+    filtered = cachedHistoryItems.filter(
+      (item) => item.verdict === "dangerous" || item.risk_score >= 90 || item.eventType === "blocked" || item.eventType === "block"
+    );
+  } else if (currentHistoryFilter === "warnings") {
+    filtered = cachedHistoryItems.filter(
+      (item) =>
+        item.verdict === "suspicious" ||
+        (item.risk_score >= 80 && item.risk_score < 90) ||
+        item.eventType === "warning" ||
+        item.eventType === "unknown_publisher"
+    );
+  }
+
+  renderHistoryItems(filtered);
 }
 
 function renderHistoryItems(items: ScanHistoryItem[]): void {
   historyItemsContainer.innerHTML = "";
   if (items.length === 0) {
+    const emptyMsg =
+      currentHistoryFilter === "blocked"
+        ? "No blocked threats recorded."
+        : currentHistoryFilter === "warnings"
+        ? "No website warnings recorded."
+        : "No recent scans recorded. Active scans will appear here.";
+
     historyItemsContainer.innerHTML = `
       <div class="empty-rules-box">
         <span>🕒</span>
-        <p>No recent scans recorded. Active scans will appear here.</p>
+        <p>${emptyMsg}</p>
       </div>
     `;
     return;
@@ -501,11 +683,19 @@ function renderHistoryItems(items: ScanHistoryItem[]): void {
   items.forEach((item) => {
     const row = document.createElement("div");
     row.className = "history-item";
-    const timeFormatted = new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timeFormatted = new Date(item.timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const eventBadge = item.eventType
+      ? `<span class="rule-tag tag-severity">${escapeHtml(item.eventType)}</span>`
+      : "";
+
     row.innerHTML = `
       <div class="history-item-left">
         <span class="history-domain">${escapeHtml(item.domain)}</span>
-        <span class="history-time">${timeFormatted} • ${item.recommended_action}</span>
+        <span class="history-time">${timeFormatted} • ${escapeHtml(item.recommended_action)} ${eventBadge}</span>
       </div>
       <div class="history-item-right">
         <span class="history-score classification-badge ${item.verdict}">${item.risk_score}</span>
@@ -519,6 +709,16 @@ function renderHistoryItems(items: ScanHistoryItem[]): void {
     historyItemsContainer.appendChild(row);
   });
 }
+
+// History filter tabs click handler
+historyFilterTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    historyFilterTabs.forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    currentHistoryFilter = (tab.getAttribute("data-filter") as "all" | "blocked" | "warnings") || "all";
+    renderFilteredHistory();
+  });
+});
 
 btnClearHistory.addEventListener("click", () => {
   if (confirm("Clear all locally stored scan history?")) {
@@ -535,6 +735,7 @@ btnClearHistory.addEventListener("click", () => {
 async function loadSettingsView(): Promise<void> {
   chrome.runtime.sendMessage({ action: "GET_SETTINGS" }, (settingsRes) => {
     if (settingsRes && settingsRes.success) {
+      currentSettings = settingsRes.settings;
       const settings: ProtectionSettings = settingsRes.settings;
 
       // Update Radio state & Banner
@@ -542,24 +743,28 @@ async function loadSettingsView(): Promise<void> {
         modeStandardRadio.checked = true;
         dnrStatusPill.className = "pill-active";
         dnrStatusPill.textContent = "Standard DNR Active";
-        globalProtectionBanner.className = "protection-banner active";
-        protectionStatusLabel.textContent = "Real-Time Protection Active";
-        modeBadgePill.textContent = "STANDARD DNR";
       } else if (settings.mode === "STRICT_ALLOWLIST") {
         modeStrictRadio.checked = true;
         dnrStatusPill.className = "pill-active strict-highlight";
         dnrStatusPill.textContent = "Strict Allowlist Enforcing";
-        globalProtectionBanner.className = "protection-banner active";
-        protectionStatusLabel.textContent = "Strict Allowlist Active (Blocked all others)";
-        modeBadgePill.textContent = "STRICT ALLOWLIST";
       } else {
         modeDisabledRadio.checked = true;
         dnrStatusPill.className = "pill-disabled";
         dnrStatusPill.textContent = "Protection Disabled";
-        globalProtectionBanner.className = "protection-banner disabled";
-        protectionStatusLabel.textContent = "Protection Disabled (Browser Unprotected)";
-        modeBadgePill.textContent = "DISABLED";
       }
+
+      // Unknown Publisher toggle
+      if (toggleUnknownPublisher) {
+        toggleUnknownPublisher.checked = Boolean(settings.warnUnknownPublisher);
+      }
+
+      // Theme
+      if (selectTheme && settings.theme) {
+        selectTheme.value = settings.theme;
+        applyTheme(settings.theme);
+      }
+
+      updateProtectionStatusBanner();
 
       // Populate Threshold inputs
       inputBlockThreshold.value = String(settings.blockThreshold || 90);
@@ -623,7 +828,7 @@ function renderDomainChips(settings: ProtectionSettings): void {
 [modeStandardRadio, modeStrictRadio, modeDisabledRadio].forEach((radio) => {
   radio.addEventListener("change", () => {
     const selectedMode = (document.querySelector('input[name="protection-mode"]:checked') as HTMLInputElement)
-      ?.value;
+      ?.value as "STANDARD" | "STRICT_ALLOWLIST" | "DISABLED";
 
     if (selectedMode === "STRICT_ALLOWLIST") {
       const confirmStrict = window.confirm(
@@ -650,6 +855,22 @@ function renderDomainChips(settings: ProtectionSettings): void {
       }
     );
   });
+});
+
+// Unknown publisher toggle handler
+toggleUnknownPublisher?.addEventListener("change", () => {
+  const isEnabled = toggleUnknownPublisher.checked;
+  chrome.runtime.sendMessage(
+    {
+      action: "UPDATE_SETTINGS",
+      settings: {
+        warnUnknownPublisher: isEnabled,
+      },
+    },
+    () => {
+      loadSettingsView();
+    }
+  );
 });
 
 // Save Thresholds
@@ -736,11 +957,22 @@ btnPingBackend.addEventListener("click", async () => {
 
 // Initialize on popup open
 document.addEventListener("DOMContentLoaded", async () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("view") === "settings") {
-    switchView("settings");
-  } else {
+  await initTheme();
+
+  // Load settings first for protection banner status
+  chrome.runtime.sendMessage({ action: "GET_SETTINGS" }, async (settingsRes) => {
+    if (settingsRes && settingsRes.success) {
+      currentSettings = settingsRes.settings;
+    }
     await checkBackendHealth();
-    await scanActiveTab();
-  }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("view") === "settings") {
+      switchView("settings");
+    } else if (urlParams.get("view") === "history") {
+      switchView("history");
+    } else {
+      await scanActiveTab();
+    }
+  });
 });

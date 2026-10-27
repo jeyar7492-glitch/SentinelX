@@ -13,6 +13,8 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from .models import (
     AnalyzeResponse,
+    EvidenceSource,
+    EvidenceType,
     HttpAnalysis,
     RecommendedAction,
     RiskClassification,
@@ -126,6 +128,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.HIGH,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
         http_analysis = HttpAnalysis(
@@ -164,6 +169,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 description=reason_msg,
                 severity=RuleSeverity.MEDIUM,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
         http_analysis = HttpAnalysis(
@@ -193,6 +201,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.CRITICAL,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
     elif hostname:
@@ -219,6 +230,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.CRITICAL,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
 
@@ -242,6 +256,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.LOW if is_local else RuleSeverity.MEDIUM,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
     else:
@@ -267,6 +284,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.CRITICAL,
                 penalty=penalty,
+                evidence_type=EvidenceType.CONFIRMED,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="HIGH",
             )
         )
 
@@ -303,6 +323,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.MEDIUM,
                 penalty=penalty,
+                evidence_type=EvidenceType.HEURISTIC,
+                source=EvidenceSource.REPUTATION_LIST,
+                confidence="MEDIUM",
             )
         )
 
@@ -336,6 +359,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                     ),
                     severity=RuleSeverity.CRITICAL,
                     penalty=penalty,
+                    evidence_type=EvidenceType.HEURISTIC,
+                    source=EvidenceSource.LOCAL_HEURISTIC,
+                    confidence="HIGH",
                 )
             )
 
@@ -359,6 +385,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.MEDIUM,
                 penalty=penalty,
+                evidence_type=EvidenceType.HEURISTIC,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="MEDIUM",
             )
         )
 
@@ -386,6 +415,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 ),
                 severity=RuleSeverity.MEDIUM,
                 penalty=penalty,
+                evidence_type=EvidenceType.HEURISTIC,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="MEDIUM",
             )
         )
 
@@ -420,6 +452,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                     ),
                     severity=RuleSeverity.MEDIUM,
                     penalty=penalty,
+                    evidence_type=EvidenceType.HEURISTIC,
+                    source=EvidenceSource.LOCAL_HEURISTIC,
+                    confidence="MEDIUM",
                 )
             )
 
@@ -440,6 +475,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 description=reason_msg,
                 severity=RuleSeverity.LOW,
                 penalty=penalty,
+                evidence_type=EvidenceType.INCONCLUSIVE,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="LOW",
             )
         )
     elif url_len > 120:
@@ -453,6 +491,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                 description="The URL is longer than typical website addresses, warranting closer inspection.",
                 severity=RuleSeverity.LOW,
                 penalty=penalty,
+                evidence_type=EvidenceType.INCONCLUSIVE,
+                source=EvidenceSource.LOCAL_HEURISTIC,
+                confidence="LOW",
             )
         )
 
@@ -474,6 +515,9 @@ def analyze_url(raw_url: str, policy: RiskPolicyConfig = DEFAULT_POLICY) -> Anal
                     description=reason_msg,
                     severity=RuleSeverity.LOW,
                     penalty=penalty,
+                    evidence_type=EvidenceType.INCONCLUSIVE,
+                    source=EvidenceSource.LOCAL_HEURISTIC,
+                    confidence="LOW",
                 )
             )
 

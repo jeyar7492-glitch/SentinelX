@@ -1,6 +1,6 @@
-# SentinelX — Real-Time Browser Security Shield & Threat Blocker
+# SentinelX — Advanced Browser Security Platform
 
-**SentinelX** is a local-first, zero-cost cybersecurity browser shield engineered for **Ubuntu Linux** and **Google Chrome (Manifest V3)**. It provides pre-navigation network blocking via `declarativeNetRequest`, real-time navigation evaluation, full-page interstitial warnings for dangerous destinations, transparent risk scoring heuristics, and an automatically managed local FastAPI backend with user-level systemd service autostart.
+**SentinelX** is a local-first, zero-cost cybersecurity browser shield engineered for **Ubuntu Linux** and **Google Chrome (Manifest V3)**. It provides pre-navigation network blocking via `declarativeNetRequest`, real-time navigation evaluation, full-page glassmorphic interstitial warnings for dangerous destinations, transparent risk scoring heuristics, structured evidence tracking, and an automatically managed local FastAPI backend with user-level systemd service autostart.
 
 ---
 
@@ -18,18 +18,22 @@
 │             │                                        │                 │
 │             ▼                                        ▼                 │
 │  ┌───────────────────────┐             ┌────────────────────────────┐  │
-│  │  In-Extension Engine  │             │   Full-Page Interstitial   │  │
+│  │  In-Extension Engine  │             │  Glassmorphic Interstitial │  │
 │  │  (local-analyzer.ts)  │             │       (blocked.html)       │  │
-│  │  Sub-ms Heuristics &  │             │   Dual Mode: BLOCK / WARN  │  │
-│  │ Degraded Mode Offline │             │   Controlled Override      │  │
+│  │  Sub-ms Heuristics &  │             │   Mode A: Unknown Pub (3s) │  │
+│  │ Degraded Mode Offline │             │   Mode B: Warning (80-89)  │  │
+│  │ Bounded Cache (100)   │             │   Mode C: Block (90+)      │  │
 │  └──────────┬────────────┘             └────────────────────────────┘  │
 │             │                                                          │
 │             ▼                                                          │
 │  ┌───────────────────────┐                                             │
-│  │  Popup Cyber Dashboard│                                             │
-│  │   Scanner • History   │                                             │
-│  │     Settings Tab      │                                             │
+│  │ Glassmorphism Dashboard│                                            │
+│  │ 3-State Protection    │                                             │
+│  │ Light/Dark Theming    │                                             │
+│  │ Scanner • History     │                                             │
+│  │ Settings & Thresholds │                                             │
 │  └──────────┬────────────┘                                             │
+│             │                                                          │
 └─────────────┼──────────────────────────────────────────────────────────┘
               │ HTTP (Local Loopback 127.0.0.1:8000 only)
               ▼
@@ -49,57 +53,69 @@
 │  │                 FastAPI Local Core Backend                       │  │
 │  │            Bound exclusively to 127.0.0.1:8000                   │  │
 │  │    Strict Localhost restriction & Chrome Extension Origin Guard  │  │
-│  │    Deep URL structure, IDN, brand spoofing & protocol analysis   │  │
+│  │    Structured evidence (Confirmed, Heuristic, Inconclusive)      │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚡ Key Highlights & Critical Upgrades
+## ⚡ Key Highlights & Platform Capabilities
 
-### 1. Zero Manual Backend Startup (Ubuntu Systemd User Service)
-- **Eliminates manual terminal runs**: No need to run `.venv/bin/python backend/run.py` manually.
-- **Systemd User Unit**: Installed in `~/.config/systemd/user/sentinelx.service`.
-- **Automatic autostart**: Launches upon login (`default.target`).
-- **Crash Recovery**: `Restart=on-failure` automatically restarts the process in 3 seconds if terminated.
-- **Diagnostic Tool**: Includes `./scripts/diagnostics.sh` to verify Python venv, service state, loopback binding, API health, and extension artifacts.
+### 1. Professional Glassmorphism Design System
+- **Midnight Navy Aesthetics**: Deep dark background (`#060913` to `#0d1527`), subtle cyan (`#00d4ff`) and violet (`#a855f7`) accents, restrained blur (`backdrop-filter: blur(14px)`), and thin borders (`rgba(255, 255, 255, 0.09)`).
+- **Light/Dark Theme Switching**: Full support for Dark (Midnight Navy), Light (Clean Slate), and System default with instant toggle and persistent storage.
+- **3-State Global Protection Status**:
+  - `Protected`: Green glow. Pre-navigation DNR active with either local engine or backend online.
+  - `Limited Protection`: Amber glow. Backend offline or unverified publisher warnings disabled; local heuristic engine and DNR remain active.
+  - `Protection Unavailable`: Red glow. User explicitly disabled protection in settings.
+- **Responsive Layout**: Designed for seamless use both inside the compact 440px popup dropdown and in full browser tab dashboard mode (`chrome-extension://<id>/popup.html`).
 
-### 2. Browser-Wide Navigation Protection (Manifest V3)
-- **Real-Time Evaluation**: Monitors top-level navigations (`chrome.webNavigation.onBeforeNavigate`).
-- **Pre-Navigation Socket Cutoff**: Automatically compiles high-confidence threats into `chrome.declarativeNetRequest` dynamic rules to abort connections before packets leave the machine.
-- **In-Extension Heuristic Engine (`local-analyzer.ts`)**: Evaluates navigations in under 0.2ms using transparent rules without latency.
-- **Loopback & Sandbox Safeguards**: Restricted system schemes (`chrome://`, `about:`, `file:`, `chrome-extension://`) and developer loopback interfaces (`127.0.0.1`, `localhost`) are preserved.
+### 2. Full-Page Warning & Block Interstitials (`blocked.html`)
+- **Mode A: Unknown Publisher**:
+  - Compact amber warning explaining that website publisher identity is unverified (not automatically malicious).
+  - Displays target domain and requested URL.
+  - Visible **3-second safety countdown** before enabling the explicit "Continue to Website" button.
+  - Destination remains strictly blocked during the countdown; timer expiration does **NOT** automatically open the site.
+  - "Return to Safety" / "Close Tab" safe action.
+  - Continuing issues a tab-scoped single-use bypass; no permanent trust is granted.
+- **Mode B: Suspicious Website Warning (Risk 80–89)**:
+  - Prominent amber banner detailing observed suspicious signals and why they matter.
+  - Distinguishes confirmed evidence from heuristic signals.
+  - Return to safety primary button with controlled, delayed continue option.
+- **Mode C: High-Risk Block (Risk 90+)**:
+  - Crimson restrained warning with exact block reason, normalized hostname, timestamp, and rule breakdown.
+  - No unrestricted bypass by default.
+  - Guaranteed prevention of infinite redirect loops.
 
-### 3. Full-Page Warning & Block Interstitial (`blocked.html`)
-- Displays requested URL, target hostname, risk score, verdict, and specific detection reasons.
-- **Dual Enforcement Modes**:
-  - **BLOCK (Score 90–100 or Confirmed Threat)**: Aborts connection immediately; proceed action disabled; includes accordion override with explicit risk acknowledgement for false positives.
-  - **WARN_INTERSTITIAL (Score 80–89)**: Displays prominent amber warning with "Back to Safety" and a controlled "Proceed to Website" action.
-- **Strict Single-Use Transition Tokens & Repeat Protection**: Proceeding from a warning issues a strict single-use navigation token (`ALLOW_SESSION_BYPASS`) scoped only to that immediate tab transition. Warnings are never permanently suppressed: repeat visits, page reloads, new tabs, and different paths are guaranteed to re-trigger the security warning.
+### 3. Structured Detection Results
+Every triggered finding in both the Python core and the in-extension analyzer includes:
+- **`evidence_type`**:
+  - `confirmed`: Directly observed structural indicators (e.g. raw IP host, userinfo `@` credential spoofing, confirmed malicious signature).
+  - `heuristic`: Statistically correlated patterns (e.g. brand impersonation, high-abuse TLDs, excessive subdomains, open redirect query params).
+  - `inconclusive`: Contextual flags requiring user review (e.g. elevated URL length).
+- **`source`**: `local_heuristic`, `reputation_list`, or `verified_signature`.
+- **`confidence`**: `HIGH`, `MEDIUM`, or `LOW`.
 
-### 4. Central Risk Policy & Degraded Mode Resilience
+### 4. Central Risk Policy Thresholds
 | Score Range | Verdict | Action | Policy Behavior |
 | :--- | :--- | :--- | :--- |
-| **90 – 100** | `dangerous` | `BLOCK` | Automatic pre-navigation block via DNR and interstitial. |
-| **80 – 89** | `suspicious` | `WARN_INTERSTITIAL` | Intercepts navigation with prominent warning interstitial. |
+| **90 – 100** | `dangerous` | `BLOCK` | Automatic pre-navigation block via DNR and block interstitial. |
+| **80 – 89** | `suspicious` | `WARN_INTERSTITIAL` | Intercepts navigation with warning interstitial and 3s countdown. |
 | **30 – 79** | `suspicious` | `PROCEED_WITH_CAUTION` | Displays caution advisory in popup scanner. |
 | **< 30 (Trusted)** | `safe` | `ALLOW` | Verified reputable domain (e.g. `google.com`, `github.com`). |
-| **< 30 (Unverified)** | `unknown` | `PROCEED_WITH_CAUTION` | **Never falsely assumed safe.** Flagged as unverified domain. |
+| **< 30 (Unverified)** | `unknown` | `PROCEED_WITH_CAUTION` | **Never assumed safe.** Flagged as unverified domain. |
 | **Override** | `dangerous` | `BLOCK` | Brand impersonation / userinfo spoofing immediately triggers BLOCK. |
 
-- **Offline Degraded Mode**: If the local backend is offline, the extension automatically falls back to `evaluateUrlLocally`, displays `DEGRADED (Backend Offline - In-Browser Local Heuristics)`, keeps declarativeNetRequest active, and **never marks unverified sites safe**.
-
-### 5. Cyber Dashboard UI
-- **Dark Theme**: Deep navy background (`#070b14`), electric blue accents (`#00d4ff`), emerald safe (`#10b981`), amber warning (`#f59e0b`), and crimson block (`#ef4444`).
-- **Multi-Tab Architecture**:
-  - **Scanner**: One-click active tab scanning, manual URL input, animated risk gauge, structured flags, and protocol explainers.
-  - **History**: Local session history with quick re-scan capabilities.
-  - **Settings**: Toggle between *Standard*, *Strict Allowlist*, and *Disabled* modes, adjust threshold numbers, manage custom blocklists/allowlists, and run live backend test pings.
+### 5. Advanced, Lightweight Navigation Defense
+- **Single-Use Warning Transitions & Repeat Protection**: Single-use tokens in `oneTimeNavigationBypasses` map (`tabId:url` / `tabId:domain`) with 15s TTL are strictly consumed upon first use. Repeat visits, reloads, new tabs, and different paths are guaranteed to re-trigger warnings.
+- **Bounded In-Memory Cache**: 100 entries max with 60s TTL; automatically purged upon settings modification or list updates.
+- **Redirect Chain Tracking**: Monitored via `webNavigation.onCommitted` qualifier flags (`server_redirect`, `client_redirect`) without requiring invasive permissions.
+- **Zero Cloud Calls / Privacy Guarantee**: 100% local processing; zero third-party telemetry, tracking, or cloud dependencies.
 
 ---
 
-## 🚀 Quick Start & Installation
+## 🚀 Installation & Setup
 
 ### Step 1: Install & Verify Ubuntu Systemd Service
 The backend service installs into your user session without root/sudo permissions:
@@ -112,7 +128,7 @@ The backend service installs into your user session without root/sudo permission
 ./scripts/diagnostics.sh
 ```
 
-To manage the service directly:
+Service management commands:
 ```bash
 # Check status
 systemctl --user status sentinelx.service
@@ -120,9 +136,7 @@ systemctl --user status sentinelx.service
 # View live logs
 journalctl --user -u sentinelx.service -f
 
-# Stop / Start / Restart
-systemctl --user stop sentinelx.service
-systemctl --user start sentinelx.service
+# Restart / Stop / Start
 systemctl --user restart sentinelx.service
 ```
 
@@ -137,30 +151,46 @@ npm run build
 1. Open Google Chrome and navigate to `chrome://extensions/`.
 2. Toggle **Developer mode** on (top-right switch).
 3. Click **Load unpacked** (top-left button).
-4. Select the directory: `~/Projects/sentinelx/extension`.
+4. Select the directory: `/home/child/Projects/sentinelx/extension`.
 5. Pin **SentinelX** to your toolbar.
 
 ---
 
 ## 🧪 Verification & Automated Testing
 
-### 1. Backend Pytest Suite (26 Tests)
-Validates model validation, analyzer penalties, risk thresholds, loopback binding restriction, and extension origin authorization:
+### 1. Extension Test Suite (49 Tests)
+Validates unknown publisher interception, 3-second countdown state machine, single-use bypass tokens, repeat visit protection, structured evidence types, bounded cache eviction, redirect tracking, and DNR compilation:
 ```bash
-.venv/bin/pytest -v
+cd extension
+npm test
 ```
+*Current status: 49 passing, 0 failing.*
 
-### 2. Extension TypeScript Unit Tests (28 Tests)
-Validates domain normalization, boundary matching, DNR compilation, in-extension heuristic analysis, and open-redirect sanitization:
+### 2. Backend Pytest Suite (29 Tests)
+Validates FastAPI endpoints, transparent heuristic engine, central risk policy boundaries (79, 80, 89, 90, 100), origin validation, localhost restriction, and structured evidence fields (`evidence_type`, `source`, `confidence`):
 ```bash
-cd extension && npm test
+.venv/bin/pytest backend/tests -v
 ```
+*Current status: 29 passing, 0 failing.*
 
-### 3. Chrome Headless Integration Test (Verifiable Proof)
+### 3. Real Chrome Headless Integration Test
 Launches headless Google Chrome with remote debugging pipe to test real declarativeNetRequest blocking:
 ```bash
 node scripts/verify_chrome_blocking.mjs
 ```
+*Current status: Verified pre-navigation socket cutoff with 0 bytes transmitted to destination server.*
+
+---
+
+## 📋 Permissions Justification
+
+| Permission | Justification |
+| :--- | :--- |
+| `declarativeNetRequest` | Pre-navigation socket-level blocking of confirmed threats before network packets leave the host. |
+| `webNavigation` | Interception of top-level tab navigations to evaluate URLs and redirect unverified/unsafe destinations to `blocked.html`. |
+| `storage` | Local storage of user settings, custom blocklists/allowlists, and scan history in Chrome's local storage sandbox. |
+| `tabs` | Required to query the active tab's domain for on-demand scanner analysis and safe back navigation. |
+| `127.0.0.1:8000/*` | Local loopback communication with the SentinelX FastAPI backend service. |
 
 ---
 
@@ -168,3 +198,4 @@ node scripts/verify_chrome_blocking.mjs
 - **100% Zero Cost**: No external subscriptions, paid threat APIs, or cloud infrastructure.
 - **Zero Telemetry**: All analysis runs locally on `127.0.0.1` and inside browser memory. Browsing history is never transmitted over the internet.
 - **Safe Execution**: SentinelX never executes or visits flagged URLs; analysis operates strictly on URL strings and pre-navigation metadata.
+- **Honest Security Language**: Transport encryption (HTTPS) is explicitly explained as encryption in transit rather than proof of authenticity or safety. Unverified domains are never falsely assumed safe.

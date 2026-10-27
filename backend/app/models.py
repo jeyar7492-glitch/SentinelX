@@ -82,6 +82,20 @@ class HttpAnalysis(BaseModel):
     detailed_explanation: str
 
 
+class EvidenceType(str, Enum):
+    """Classification of evidence backing a detection signal."""
+    CONFIRMED = "confirmed"
+    HEURISTIC = "heuristic"
+    INCONCLUSIVE = "inconclusive"
+
+
+class EvidenceSource(str, Enum):
+    """Origin source of the detection signal."""
+    LOCAL_HEURISTIC = "local_heuristic"
+    REPUTATION_LIST = "reputation_list"
+    VERIFIED_SIGNATURE = "verified_signature"
+
+
 class TriggeredRule(BaseModel):
     rule_id: str
     category: str
@@ -89,6 +103,9 @@ class TriggeredRule(BaseModel):
     description: str
     severity: RuleSeverity
     penalty: int
+    evidence_type: EvidenceType = EvidenceType.HEURISTIC
+    source: EvidenceSource = EvidenceSource.LOCAL_HEURISTIC
+    confidence: str = "MEDIUM"
 
 
 class AnalyzeResponse(BaseModel):
